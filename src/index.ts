@@ -13,6 +13,32 @@ let routes: Route[] = [];
  */
 let errorCodes: statusCodeComp[] = [];
 /**
+ * Default 404 status component
+ * @returns 
+ */
+let Status404 = function () {
+    return createElement( 'center', {},
+        createElement( 'h2', {},
+            404,
+            createElement( 'br' ),
+            "Page not found."
+        )
+    );
+}
+/**
+ * Default 403 status component
+ * @returns 
+ */
+let Status403 = function () {
+    return createElement( 'center', {},
+        createElement( 'h2', {},
+            403,
+            createElement( 'br' ),
+            "Access is Forbidden."
+        )
+    );
+}
+/**
  * Entry point for the application.
  * This function creates a new instance of the context
  * and renders the application to the DOM.
@@ -22,13 +48,16 @@ let errorCodes: statusCodeComp[] = [];
  */
 export const createApp = ( root: HTMLElement ) => {
     rootElement = root;
-    window.addEventListener( 'popstate', renderRoute );
-    document.addEventListener( 'DOMContentLoaded', renderRoute );
+    window?.addEventListener( 'popstate', renderRoute );
+    document?.addEventListener( 'DOMContentLoaded', renderRoute );
+    setStatusCodeComponent( '404', Status404 );
+    setStatusCodeComponent( '403', Status403 );
     return {
         render: ( element: HTMLElement, props: any, ...children: any[] ) => {
-            render( createElement( element, props, ...children ), root );
+            if ( routes.length <= 0 )
+                render( createElement( element, props, ...children ), root );
         },
-        useRoutes: ( routes ) => {
+        useRoutes: ( routes = [] ) => {
             createRoutes( routes );
         },
         setStatusCodeComponent: ( code, component ) => {
@@ -43,7 +72,7 @@ export const createApp = ( root: HTMLElement ) => {
  * @param  {...any} children 
  * @returns 
  */
-export const createElement = ( type: any, props: any, ...children: any[] ) => {
+export const createElement = ( type: any, props?: any, ...children: any[] ) => {
     return {
         type: type,
         props: {
@@ -82,6 +111,7 @@ export const isClassComponent = ( component ) => {
  * @param {*} element 
  * @param {*} container 
  */
+
 export const render = async ( element, container ) => {
     let { type, props } = element;
     let actualElement = element;
@@ -94,6 +124,11 @@ export const render = async ( element, container ) => {
     }
 
     if ( typeof type === 'function' ) {
+
+        if ( 'default' in type ) {
+            type = type.default ?? type;
+        }
+
         if ( isClassComponent( type ) ) {
             instance = new type( props );
             instance?.willMount && instance?.willMount();
@@ -109,6 +144,11 @@ export const render = async ( element, container ) => {
         }
     }
 
+    if ( [ 'object' ].includes( typeof actualElement.type ) && "default" in actualElement.type ) {
+        actualElement.type = actualElement.type.default;
+        await render( actualElement, container );
+        return;
+    }
     if ( actualElement.type === "TEXT_ELEMENT" )
         dom = document.createTextNode( props.nodeValue )
     else if ( actualElement.type === "FRAGMENT" ) {
@@ -131,6 +171,7 @@ export const render = async ( element, container ) => {
     container.append( dom );
     instance?.onMount && instance?.onMount();
 }
+
 /**
  * Check if string is an text/html type.
  * @param {*} str 
@@ -140,6 +181,7 @@ export const isHTML = ( str ) => {
     const doc = new DOMParser().parseFromString( str, "text/html" );
     return Array.from( doc.body.childNodes ).some( node => node.nodeType === 1 );
 }
+
 /**
  * Compile the Handlebars template with optional data.
  * This is a utility function that can be used to render
@@ -153,6 +195,7 @@ export const isHTML = ( str ) => {
 export const withData = ( html, data ) => {
     return hb.compile( html )( data || {} );
 }
+
 /**
  * Change route location or change page.
  * @param {*} path 
@@ -161,6 +204,19 @@ export const navigateTo = async ( path ) => {
     history.pushState( {}, '', path );
     await renderRoute();
 }
+
+/**
+ * Render new page or location
+ */
+export const renderRoute = async () => {
+    if ( routes.length > 0 ) {
+        const path = window.location.pathname;
+        const { component, params } = await matchRoute( path );
+        let resolved = await component;
+        render( { type: resolved, props: { params } }, rootElement );
+    }
+}
+
 /**
  * Find the match component to be render for the route.
  * @param {*} path 
@@ -184,9 +240,11 @@ const matchRoute = async ( path ) => {
             paramNames.forEach( ( key, i ) => {
                 params[ key ] = decodeURIComponent( match[ i + 1 ] );
             } );
-            for ( const fn of ( route.middlewares || [] ) ) {
-                if ( !( await fn() ) ) {
-                    return { component: getStatusCodeComponent( 403 )?.component, params: {} };
+            if ( route.middlewares && route.middlewares.length > 0 ) {
+                for ( const fn of ( route.middlewares || [] ) ) {
+                    if ( !( await fn() ) ) {
+                        return { component: getStatusCodeComponent( 403 )?.component, params: {} };
+                    }
                 }
             }
             return { component: route.component, params };
@@ -194,15 +252,7 @@ const matchRoute = async ( path ) => {
     }
     return { component: getStatusCodeComponent( 404 )?.component, params: {} };
 };
-/**
- * Render new page or location
- */
-export const renderRoute = async () => {
-    const path = window.location.pathname;
-    const { component, params } = await matchRoute( path );
-    const resolved = await component();
-    render( { type: resolved, props: { params } }, rootElement );
-}
+
 /**
  * Use to easily create route on runtime.
  * @param {*} path 
@@ -211,13 +261,21 @@ export const renderRoute = async () => {
 export const createRoute = ( path, component, alias, middlewares = [] ) => {
     routes.push( { path, component, alias, middlewares } );
 }
+
 /**
  * Compile all the routes.
  * @param {*} routes Array<{ path: string, component: object }>
  */
-export const createRoutes = ( routes ) => {
-    routes = routes || [];
+export const createRoutes = ( _routes ) => {
+    routes = [];
+    _routes.map( r => createRoute(
+        r.path,
+        r.component,
+        r.alias,
+        r.middlewares )
+    )
 }
+
 /**
  * Use to easily remove route on runtime.
  * @param {*} path 
@@ -225,9 +283,10 @@ export const createRoutes = ( routes ) => {
 export const deleteRoute = ( path ) => {
     routes = routes.filter( e => e.path !== path );
 }
+
 /**
  * Set status code component
- * @param comonent 
+ * @param component 
  */
 export const setStatusCodeComponent = ( code, component ) => {
     const status = getStatusCodeComponent( code );
@@ -237,6 +296,20 @@ export const setStatusCodeComponent = ( code, component ) => {
         errorCodes.push( { code, component } );
 }
 
+/**
+ * Get the status code component
+ * @param code 
+ * @returns 
+ */
 export const getStatusCodeComponent = ( code ) => {
     return errorCodes.find( c => c.code.toString() === code.toString() );
+}
+
+/**
+ * Check if component is a class or a function.
+ * @param fn 
+ * @returns 
+ */
+export const isConstructable = ( fn ) => {
+    try { new fn(); return true; } catch { return false; }
 }

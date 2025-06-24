@@ -1,12 +1,16 @@
 {
   "name": "@devmore/vanilact",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "Pure vanila javascript.",
-  "main": "dist/index.js",
+  "main": "dist/vanilact.js",
   "scripts": {
-    "build": "tsc",
-    "minify": "esbuild dist/index.js --minify --outfile=dist/index.min.js",
-    "build:all": "npm run build && npm run minify"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:raw": "vite build --minify false",
+    "build:min": "vite build --minify terser",
+    "build:all": "npm run build:raw && npm run build:min",
+    "prepublishOnly": "npm run build:all"
   },
   "repository": {
     "type": "git",
@@ -29,7 +33,11 @@
   "devDependencies": {
     "@types/handlebars": "^4.0.40",
     "esbuild": "^0.25.5",
-    "typescript": "^5.8.3"
+    "jsdom": "^26.1.0",
+    "rollup-plugin-terser": "^7.0.2",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-handlebars": "^2.0.0"
   },
   "files": [
     "dist",
@@ -38,5 +46,11 @@
     "package.json",
     "package-lock.json",
     "tsconfig.json"
-  ]
+  ],
+  "dependencies": {
+    "handlebars": "^4.7.8"
+  },
+  "directories": {
+    "test": "test"
+  }
 }
