@@ -10,3 +10,8 @@ export type Component = {
     render: () => any,
     onMount?: () => void,
 }
+
+export type statusCodeComp = {
+    code: number | string,
+    component: any
+}

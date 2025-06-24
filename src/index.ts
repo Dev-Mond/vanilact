@@ -1,5 +1,5 @@
 import hb from 'handlebars';
-import { Route, Component } from './types';
+import { Route, Component, statusCodeComp } from './types';
 /**
  * Globaly available root element.
  */
@@ -8,6 +8,10 @@ let rootElement: null | HTMLElement = null;
  * List of avaliable routes
  */
 let routes: Route[] = [];
+/**
+ * Error statuses.
+ */
+let errorCodes: statusCodeComp[] = [];
 /**
  * Entry point for the application.
  * This function creates a new instance of the context
@@ -26,6 +30,9 @@ export const createApp = ( root: HTMLElement ) => {
         },
         useRoutes: ( routes ) => {
             createRoutes( routes );
+        },
+        setStatusCodeComponent: ( code, component ) => {
+            setStatusCodeComponent( code, component );
         }
     }
 }
@@ -179,13 +186,13 @@ const matchRoute = async ( path ) => {
             } );
             for ( const fn of ( route.middlewares || [] ) ) {
                 if ( !( await fn() ) ) {
-                    return { component: import( './status_code/403'! ), params: {} };
+                    return { component: getStatusCodeComponent( 403 )?.component, params: {} };
                 }
             }
             return { component: route.component, params };
         }
     }
-    return { component: import( './status_code/404'! ), params: {} };
+    return { component: getStatusCodeComponent( 404 )?.component, params: {} };
 };
 /**
  * Render new page or location
@@ -217,4 +224,19 @@ export const createRoutes = ( routes ) => {
  */
 export const deleteRoute = ( path ) => {
     routes = routes.filter( e => e.path !== path );
+}
+/**
+ * Set status code component
+ * @param comonent 
+ */
+export const setStatusCodeComponent = ( code, component ) => {
+    const status = getStatusCodeComponent( code );
+    if ( status )
+        status.component = component;
+    else
+        errorCodes.push( { code, component } );
+}
+
+export const getStatusCodeComponent = ( code ) => {
+    return errorCodes.find( c => c.code.toString() === code.toString() );
 }
