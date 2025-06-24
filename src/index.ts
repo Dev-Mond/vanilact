@@ -1,0 +1,220 @@
+import hb from 'handlebars';
+import { Route, Component } from './types';
+/**
+ * Globaly available root element.
+ */
+let rootElement: null | HTMLElement = null;
+/**
+ * List of avaliable routes
+ */
+let routes: Route[] = [];
+/**
+ * Entry point for the application.
+ * This function creates a new instance of the context
+ * and renders the application to the DOM.
+ * @param {*} context 
+ * @param {*} options 
+ * @returns 
+ */
+export const createApp = ( root: HTMLElement ) => {
+    rootElement = root;
+    window.addEventListener( 'popstate', renderRoute );
+    document.addEventListener( 'DOMContentLoaded', renderRoute );
+    return {
+        render: ( element: HTMLElement, props: any, ...children: any[] ) => {
+            render( createElement( element, props, ...children ), root );
+        },
+        useRoutes: ( routes ) => {
+            createRoutes( routes );
+        }
+    }
+}
+/**
+ * Use to create dom element.
+ * @param {*} type 
+ * @param {*} props 
+ * @param  {...any} children 
+ * @returns 
+ */
+export const createElement = ( type: any, props: any, ...children: any[] ) => {
+    return {
+        type: type,
+        props: {
+            ...props,
+            children: ( children || [] ).map( ( child ) => [ 'object', 'function' ].includes( typeof child ) ? child : createTextElement( child ) )
+        }
+    }
+}
+/**
+ * To be able to create text nodes
+ * @param {*} text 
+ * @returns 
+ */
+export const createTextElement = ( text ) => {
+    return {
+        type: isHTML( text ) ? 'FRAGMENT' : 'TEXT_ELEMENT',
+        props: { nodeValue: text, children: [] },
+    };
+}
+
+/**
+ * Check if the element is type of component.
+ * @param {*} component 
+ * @returns 
+ */
+export const isClassComponent = ( component ) => {
+    return (
+        typeof component === 'function' &&
+        component.prototype &&
+        component.prototype.render
+    );
+}
+
+/**
+ * To be able to mount and render our ui.
+ * @param {*} element 
+ * @param {*} container 
+ */
+export const render = async ( element, container ) => {
+    let { type, props } = element;
+    let actualElement = element;
+    let instance: Component | null = null;
+    let dom: null | Node = null;
+
+    if ( type instanceof Promise ) {
+        let result = await type.then();
+        type = result.default ?? result;
+    }
+
+    if ( typeof type === 'function' ) {
+        if ( isClassComponent( type ) ) {
+            instance = new type( props );
+            instance?.willMount && instance?.willMount();
+            actualElement = instance?.render();
+            if ( actualElement.type instanceof Promise ) {
+                actualElement.type = await type.then();
+                let r = await actualElement.type.then();
+                actualElement.type = r.default ?? r;
+            }
+        }
+        else {
+            actualElement = type( props );
+        }
+    }
+
+    if ( actualElement.type === "TEXT_ELEMENT" )
+        dom = document.createTextNode( props.nodeValue )
+    else if ( actualElement.type === "FRAGMENT" ) {
+        dom = document.createDocumentFragment();
+        dom.appendChild( document.createRange().createContextualFragment( props.nodeValue ) );
+    }
+    else if ( actualElement.type === null || actualElement.type === "" || isClassComponent( actualElement.type ) ) {
+        dom = document.createDocumentFragment();
+    }
+    else
+        dom = document.createElement( actualElement.type )
+
+    Object.entries( actualElement.props || {} ).forEach( ( [ name, value ] ) => {
+        if ( name !== 'children' && dom ) {
+            dom[ name ] = value;
+        }
+    } );
+
+    await Promise.all( ( actualElement.props?.children || [] ).map( async ( child ) => await render( child, dom ) ) );
+    container.append( dom );
+    instance?.onMount && instance?.onMount();
+}
+/**
+ * Check if string is an text/html type.
+ * @param {*} str 
+ * @returns 
+ */
+export const isHTML = ( str ) => {
+    const doc = new DOMParser().parseFromString( str, "text/html" );
+    return Array.from( doc.body.childNodes ).some( node => node.nodeType === 1 );
+}
+/**
+ * Compile the Handlebars template with optional data.
+ * This is a utility function that can be used to render
+ * Handlebars templates with data.
+ * It uses the Handlebars compile function to compile the template
+ * and then executes it with the provided data.
+ * @param {*} html 
+ * @param {*} data 
+ * @returns 
+ */
+export const withData = ( html, data ) => {
+    return hb.compile( html )( data || {} );
+}
+/**
+ * Change route location or change page.
+ * @param {*} path 
+ */
+export const navigateTo = async ( path ) => {
+    history.pushState( {}, '', path );
+    await renderRoute();
+}
+/**
+ * Find the match component to be render for the route.
+ * @param {*} path 
+ * @returns 
+ */
+const matchRoute = async ( path ) => {
+    for ( let route of routes ) {
+        const paramNames: any[] = [];
+        const regexPath = route.path
+            .replace( /:[^/]+/g, ( match ) => {
+                paramNames.push( match.slice( 1 ) );
+                return '([^/]+)';
+            } )
+            .replace( /\//g, '\\/' );
+
+        const regex = new RegExp( `^${ regexPath }$` );
+        const match = path.match( regex );
+
+        if ( match ) {
+            const params = {};
+            paramNames.forEach( ( key, i ) => {
+                params[ key ] = decodeURIComponent( match[ i + 1 ] );
+            } );
+            for ( const fn of ( route.middlewares || [] ) ) {
+                if ( !( await fn() ) ) {
+                    return { component: import( './status_code/403'! ), params: {} };
+                }
+            }
+            return { component: route.component, params };
+        }
+    }
+    return { component: import( './status_code/404'! ), params: {} };
+};
+/**
+ * Render new page or location
+ */
+export const renderRoute = async () => {
+    const path = window.location.pathname;
+    const { component, params } = await matchRoute( path );
+    const resolved = await component();
+    render( { type: resolved, props: { params } }, rootElement );
+}
+/**
+ * Use to easily create route on runtime.
+ * @param {*} path 
+ * @param {*} component 
+ */
+export const createRoute = ( path, component, alias, middlewares = [] ) => {
+    routes.push( { path, component, alias, middlewares } );
+}
+/**
+ * Compile all the routes.
+ * @param {*} routes Array<{ path: string, component: object }>
+ */
+export const createRoutes = ( routes ) => {
+    routes = routes || [];
+}
+/**
+ * Use to easily remove route on runtime.
+ * @param {*} path 
+ */
+export const deleteRoute = ( path ) => {
+    routes = routes.filter( e => e.path !== path );
+}

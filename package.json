@@ -1,0 +1,34 @@
+{
+  "name": "vanilact",
+  "version": "1.0.0",
+  "description": "Pure vanila javascript.",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "minify": "esbuild dist/index.js --minify --outfile=dist/index.min.js",
+    "build:all": "npm run build && npm run minify"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dev-Mond/vanilact.git"
+  },
+  "keywords": [
+    "browser",
+    "framework",
+    "vanila",
+    "react",
+    "vanilact",
+    "vanilact.js"
+  ],
+  "author": "Dev-Mond",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Dev-Mond/vanilact/issues"
+  },
+  "homepage": "https://github.com/Dev-Mond/vanilact#readme",
+  "devDependencies": {
+    "@types/handlebars": "^4.0.40",
+    "esbuild": "^0.25.5",
+    "typescript": "^5.8.3"
+  }
+}
