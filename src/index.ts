@@ -24,7 +24,7 @@ let Status404 = function () {
             "Page not found."
         )
     );
-}
+};
 /**
  * Default 403 status component
  * @returns 
@@ -37,7 +37,7 @@ let Status403 = function () {
             "Access is Forbidden."
         )
     );
-}
+};
 /**
  * Entry point for the application.
  * This function creates a new instance of the context
@@ -63,8 +63,8 @@ export const createApp = ( root: HTMLElement ) => {
         setStatusCodeComponent: ( code, component ) => {
             setStatusCodeComponent( code, component );
         }
-    }
-}
+    };
+};
 /**
  * Use to create dom element.
  * @param {*} type 
@@ -79,8 +79,8 @@ export const createElement = ( type: any, props?: any, ...children: any[] ) => {
             ...props,
             children: ( children || [] ).map( ( child ) => [ 'object', 'function' ].includes( typeof child ) ? child : createTextElement( child ) )
         }
-    }
-}
+    };
+};
 /**
  * To be able to create text nodes
  * @param {*} text 
@@ -91,7 +91,7 @@ export const createTextElement = ( text ) => {
         type: isHTML( text ) ? 'FRAGMENT' : 'TEXT_ELEMENT',
         props: { nodeValue: text, children: [] },
     };
-}
+};
 
 /**
  * Check if the element is type of component.
@@ -104,7 +104,7 @@ export const isClassComponent = ( component ) => {
         component.prototype &&
         component.prototype.render
     );
-}
+};
 
 /**
  * To be able to mount and render our ui.
@@ -150,7 +150,7 @@ export const render = async ( element, container ) => {
         return;
     }
     if ( actualElement.type === "TEXT_ELEMENT" )
-        dom = document.createTextNode( props.nodeValue )
+        dom = document.createTextNode( props.nodeValue );
     else if ( actualElement.type === "FRAGMENT" ) {
         dom = document.createDocumentFragment();
         dom.appendChild( document.createRange().createContextualFragment( props.nodeValue ) );
@@ -159,7 +159,7 @@ export const render = async ( element, container ) => {
         dom = document.createDocumentFragment();
     }
     else
-        dom = document.createElement( actualElement.type )
+        dom = document.createElement( actualElement.type );
 
     Object.entries( actualElement.props || {} ).forEach( ( [ name, value ] ) => {
         if ( name !== 'children' && dom ) {
@@ -169,8 +169,9 @@ export const render = async ( element, container ) => {
 
     await Promise.all( ( actualElement.props?.children || [] ).map( async ( child ) => await render( child, dom ) ) );
     container.append( dom );
+    instance?.setDom && instance?.setDom( dom );
     instance?.onMount && instance?.onMount();
-}
+};
 
 /**
  * Check if string is an text/html type.
@@ -180,7 +181,7 @@ export const render = async ( element, container ) => {
 export const isHTML = ( str ) => {
     const doc = new DOMParser().parseFromString( str, "text/html" );
     return Array.from( doc.body.childNodes ).some( node => node.nodeType === 1 );
-}
+};
 
 /**
  * Compile the Handlebars template with optional data.
@@ -194,7 +195,7 @@ export const isHTML = ( str ) => {
  */
 export const withData = ( html, data ) => {
     return hb.compile( html )( data || {} );
-}
+};
 
 /**
  * Change route location or change page.
@@ -203,7 +204,7 @@ export const withData = ( html, data ) => {
 export const navigateTo = async ( path ) => {
     history.pushState( {}, '', path );
     await renderRoute();
-}
+};
 
 /**
  * Render new page or location
@@ -215,7 +216,7 @@ export const renderRoute = async () => {
         let resolved = await component;
         render( { type: resolved, props: { params } }, rootElement );
     }
-}
+};
 
 /**
  * Find the match component to be render for the route.
@@ -260,7 +261,7 @@ const matchRoute = async ( path ) => {
  */
 export const createRoute = ( path, component, alias, middlewares = [] ) => {
     routes.push( { path, component, alias, middlewares } );
-}
+};
 
 /**
  * Compile all the routes.
@@ -273,8 +274,8 @@ export const createRoutes = ( _routes ) => {
         r.component,
         r.alias,
         r.middlewares )
-    )
-}
+    );
+};
 
 /**
  * Use to easily remove route on runtime.
@@ -282,7 +283,7 @@ export const createRoutes = ( _routes ) => {
  */
 export const deleteRoute = ( path ) => {
     routes = routes.filter( e => e.path !== path );
-}
+};
 
 /**
  * Set status code component
@@ -294,7 +295,7 @@ export const setStatusCodeComponent = ( code, component ) => {
         status.component = component;
     else
         errorCodes.push( { code, component } );
-}
+};
 
 /**
  * Get the status code component
@@ -303,7 +304,7 @@ export const setStatusCodeComponent = ( code, component ) => {
  */
 export const getStatusCodeComponent = ( code ) => {
     return errorCodes.find( c => c.code.toString() === code.toString() );
-}
+};
 
 /**
  * Check if component is a class or a function.
@@ -312,4 +313,4 @@ export const getStatusCodeComponent = ( code ) => {
  */
 export const isConstructable = ( fn ) => {
     try { new fn(); return true; } catch { return false; }
-}
+};

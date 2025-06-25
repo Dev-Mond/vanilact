@@ -1,17 +1,18 @@
 export type Route = {
-    path: string
+    path: string;
     component: any,
     alias?: string,
-    middlewares?: CallableFunction[]
-}
+    middlewares?: CallableFunction[];
+};
 
 export type Component = {
     willMount?: () => void,
     render: () => any,
     onMount?: () => void,
-}
+    setDom?: ( dom: HTMLElement | Node | null ) => void;
+};
 
 export type statusCodeComp = {
     code: number | string,
-    component: any
-}
+    component: any;
+};
