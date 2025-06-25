@@ -169,7 +169,7 @@ export const render = async ( element, container ) => {
 
     await Promise.all( ( actualElement.props?.children || [] ).map( async ( child ) => await render( child, dom ) ) );
     container.append( dom );
-    instance?.setDom && instance?.setDom( dom );
+    instance?.setDom && instance?.setDom( container );
     instance?.onMount && instance?.onMount();
 };
 
