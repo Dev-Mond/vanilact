@@ -15,7 +15,10 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "types": [
+      "jest"
+    ]
   },
   "include": [
     "src"

@@ -1,5 +1,6 @@
 import hb from 'handlebars';
 import { Route, Component, statusCodeComp } from './types';
+import { K } from 'handlebars';
 /**
  * Globaly available root element.
  */
@@ -50,8 +51,10 @@ export const createApp = ( root: HTMLElement ) => {
     rootElement = root;
     window?.addEventListener( 'popstate', renderRoute );
     document?.addEventListener( 'DOMContentLoaded', renderRoute );
-    setStatusCodeComponent( '404', Status404 );
-    setStatusCodeComponent( '403', Status403 );
+    if ( !getStatusCodeComponent( 404 ) )
+        setStatusCodeComponent( 404, Status404 );
+    if ( !getStatusCodeComponent( 403 ) )
+        setStatusCodeComponent( 403, Status403 );
     return {
         render: ( element: HTMLElement, props: any, ...children: any[] ) => {
             if ( routes.length <= 0 )
@@ -111,7 +114,6 @@ export const isClassComponent = ( component ) => {
  * @param {*} element 
  * @param {*} container 
  */
-
 export const render = async ( element, container ) => {
     let { type, props } = element;
     let actualElement = element;
@@ -249,6 +251,57 @@ const matchRoute = async ( path ) => {
                 }
             }
             return { component: route.component, params };
+        }
+    }
+    return { component: getStatusCodeComponent( 404 )?.component, params: {} };
+};
+
+/**
+ * Render new page or location
+ */
+export const navigateToAlias = async ( alias, query = {} ) => {
+    if ( routes.length > 0 ) {
+        const { component, params, path } = await matchAlias( alias, query );
+        if ( path )
+            history.pushState( {}, '', path );
+        let resolved = await component;
+        render( { type: resolved, props: { params } }, rootElement );
+    }
+};
+
+/**
+ * Find the match component to be render for the route.
+ * @param {*} path 
+ * @returns 
+ */
+const matchAlias = async ( alias, query: Record<string, string> | string ) => {
+    for ( let route of routes ) {
+        if ( alias === route.alias ) {
+            let params: Record<string, string> = {};
+            let path = route.path;
+            let stringQuery: string[] = [];
+            if ( typeof query === 'string' ) {
+                const queryArr = query.split( "&" );
+                queryArr.map( ( param ) => {
+                    const [ k, v ] = param.split( '=' );
+                    params[ k ] = v;
+                } );
+            }
+            else params = query;
+            Object.entries( params ).map( ( [ k, v ] ) => {
+                stringQuery.push( `${ encodeURIComponent( k ) }=${ encodeURIComponent( v ) }` );
+            } );
+            if ( stringQuery.length > 0 ) {
+                path += "?" + stringQuery.join( "&" );
+            }
+            if ( route.middlewares && route.middlewares.length > 0 ) {
+                for ( const fn of ( route.middlewares || [] ) ) {
+                    if ( !( await fn() ) ) {
+                        return { component: getStatusCodeComponent( 403 )?.component, params: {} };
+                    }
+                }
+            }
+            return { component: route.component, params, path: path };
         }
     }
     return { component: getStatusCodeComponent( 404 )?.component, params: {} };
