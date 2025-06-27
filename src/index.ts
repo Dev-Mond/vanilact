@@ -216,6 +216,7 @@ export const renderRoute = async () => {
         const path = window.location.pathname;
         const { component, params } = await matchRoute( path );
         let resolved = await component;
+        rootElement?.replaceChildren();
         render( { type: resolved, props: { params } }, rootElement );
     }
 };
@@ -265,6 +266,7 @@ export const navigateToAlias = async ( alias, query = {} ) => {
         if ( path )
             history.pushState( {}, '', path );
         let resolved = await component;
+        rootElement?.replaceChildren();
         render( { type: resolved, props: { params } }, rootElement );
     }
 };
