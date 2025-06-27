@@ -282,16 +282,18 @@ const matchAlias = async ( alias, query: Record<string, string> | string ) => {
             let params: Record<string, string> = {};
             let path = route.path;
             let stringQuery: string[] = [];
-            if ( typeof query === 'string' ) {
+            if ( query && typeof query === 'string' ) {
                 const queryArr = query.split( "&" );
                 queryArr.map( ( param ) => {
                     const [ k, v ] = param.split( '=' );
-                    params[ k ] = v;
+                    if ( k.trim() )
+                        params[ k ] = v;
                 } );
             }
-            else params = query;
+            else params = query as Record<string, string>;
             Object.entries( params ).map( ( [ k, v ] ) => {
-                stringQuery.push( `${ encodeURIComponent( k ) }=${ encodeURIComponent( v ) }` );
+                if ( k.trim() )
+                    stringQuery.push( `${ encodeURIComponent( decodeURIComponent( k ) ) }=${ encodeURIComponent( decodeURIComponent( v ) ) }` );
             } );
             if ( stringQuery.length > 0 ) {
                 path += "?" + stringQuery.join( "&" );
@@ -369,3 +371,51 @@ export const getStatusCodeComponent = ( code ) => {
 export const isConstructable = ( fn ) => {
     try { new fn(); return true; } catch { return false; }
 };
+
+/**
+ * Component based to identify what is being used in render function.
+ */
+export class IComponent {
+    /**
+     * Store the parent node element.
+     */
+    dom: any;
+    /**
+     * Entry point
+     */
+    constructor () { this.dom = null; }
+    /**
+     * Set the parent node element.
+     * @param dom 
+     */
+    setDom ( dom ) { this.dom = dom; }
+    /**
+     * Get the dom or the specific element from the dom children
+     * This method use querySelector in finding the element.
+     * @param selector 
+     * @returns 
+     */
+    getDom ( selector ) {
+        if ( selector ) return this.dom.querySelector( selector );
+        return this.dom;
+    }
+    /**
+     * Return an array of element that is matched to the selector parameter given.
+     * This method use querySelectorAll in finding all the matched elements.
+     * @param selector 
+     * @returns 
+     */
+    getDomAll ( selector ) { return this.dom.querySelectorAll( selector ); }
+    /**
+     * Will be called before the render occur.
+     */
+    willMount () { }
+    /**
+     * Mounting template to DOM container
+     */
+    render () { }
+    /**
+     * Will be called after the render.
+     */
+    onMount () { }
+}
