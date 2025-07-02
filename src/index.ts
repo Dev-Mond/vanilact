@@ -1,6 +1,5 @@
 import hb from 'handlebars';
-import { Route, Component, statusCodeComp } from './types';
-import { K } from 'handlebars';
+import { Route, Component, statusCodeComp, Reference } from './types';
 /**
  * Globaly available root element.
  */
@@ -80,7 +79,7 @@ export const createElement = ( type: any, props?: any, ...children: any[] ) => {
         type: type,
         props: {
             ...props,
-            children: ( children || [] ).map( ( child ) => [ 'object', 'function' ].includes( typeof child ) ? child : createTextElement( child ) )
+            children: ( children || [] ).flat().map( ( child ) => [ 'object', 'function' ].includes( typeof child ) ? child : createTextElement( child ) )
         }
     };
 };
@@ -164,12 +163,22 @@ export const render = async ( element, container ) => {
         dom = document.createElement( actualElement.type );
 
     Object.entries( actualElement.props || {} ).forEach( ( [ name, value ] ) => {
-        if ( name !== 'children' && dom ) {
-            dom[ name ] = value;
+        if ( dom ) {
+            if ( name === 'ref' ) {
+                ( value as Reference ).current = dom;
+            }
+            else if ( name === 'class' ) {
+                ( dom as Element ).setAttribute( 'class', value as string );
+            }
+            else if ( name !== 'children' ) {
+                dom[ name ] = value;
+            }
         }
     } );
 
-    await Promise.all( ( actualElement.props?.children || [] ).map( async ( child ) => await render( child, dom ) ) );
+    for ( const child of actualElement.props?.children || [] ) {
+        await render( child, dom );
+    }
     container.append( dom );
     instance?.setDom && instance?.setDom( container );
     instance?.onMount && instance?.onMount();
@@ -381,6 +390,12 @@ export class IComponent {
      */
     dom: any;
     /**
+     * Variable that is monitored by renderer to identify
+     * if the re-render is required.
+     * Being reset each setState() function called
+     */
+    state: { [ key: string ]: any; } = {};
+    /**
      * Entry point
      */
     constructor () { this.dom = null; }
@@ -419,3 +434,12 @@ export class IComponent {
      */
     onMount () { }
 }
+/**
+ * Create reference object of the element
+ * @param initial 
+ * @returns 
+ */
+export const createRef = ( initial = null ) => {
+    let ref: Reference = { current: initial };
+    return ref;
+};

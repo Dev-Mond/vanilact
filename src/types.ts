@@ -16,3 +16,7 @@ export type statusCodeComp = {
     code: number | string,
     component: any;
 };
+
+export type Reference = {
+    current: any;
+};
