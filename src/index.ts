@@ -48,22 +48,27 @@ let Status403 = function () {
  */
 export const createApp = ( root: HTMLElement ) => {
     rootElement = root;
-    window?.addEventListener( 'popstate', renderRoute );
-    document?.addEventListener( 'DOMContentLoaded', renderRoute );
-    if ( !getStatusCodeComponent( 404 ) )
-        setStatusCodeComponent( 404, Status404 );
-    if ( !getStatusCodeComponent( 403 ) )
-        setStatusCodeComponent( 403, Status403 );
+    const init = () => {
+        window?.addEventListener( 'popstate', renderRoute );
+        document?.addEventListener( 'DOMContentLoaded', renderRoute );
+        if ( !getStatusCodeComponent( 404 ) )
+            setStatusCodeComponent( 404, Status404 );
+        if ( !getStatusCodeComponent( 403 ) )
+            setStatusCodeComponent( 403, Status403 );
+    };
     return {
         render: ( element: HTMLElement, props: any, ...children: any[] ) => {
-            if ( routes.length <= 0 )
+            if ( routes.length <= 0 ) {
+                init();
                 render( createElement( element, props, ...children ), root );
+            }
         },
         useRoutes: ( routes = [] ) => {
+            init();
             createRoutes( routes );
         },
-        setStatusCodeComponent: ( code, component ) => {
-            setStatusCodeComponent( code, component );
+        setStatusCodeComponent: ( code, component, params = {} ) => {
+            setStatusCodeComponent( code, component, params );
         }
     };
 };
@@ -355,12 +360,12 @@ export const deleteRoute = ( path ) => {
  * Set status code component
  * @param component 
  */
-export const setStatusCodeComponent = ( code, component ) => {
+export const setStatusCodeComponent = ( code, component, params = {} ) => {
     const status = getStatusCodeComponent( code );
     if ( status )
         status.component = component;
     else
-        errorCodes.push( { code, component } );
+        errorCodes.push( { code, component, params } );
 };
 
 /**

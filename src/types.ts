@@ -15,6 +15,7 @@ export type Component = {
 export type statusCodeComp = {
     code: number | string,
     component: any;
+    params?: { [ k: string ]: any; };
 };
 
 export type Reference = {

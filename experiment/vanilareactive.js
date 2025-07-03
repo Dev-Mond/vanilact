@@ -33,6 +33,7 @@ function useEffect ( callback, deps ) {
 
     hookIndex++;
 }
+
 function runEffects ( component ) {
     const hooks = component.hooks;
     const indices = component.effects || [];
@@ -113,6 +114,7 @@ function useLocation () {
 
     return loc;
 }
+
 function navigate ( path ) {
     location.hash = path;
 }
@@ -151,6 +153,43 @@ function lazy ( importFn ) {
     };
 }
 
+function matchRoute ( pathname, routePattern ) {
+    const pathParts = pathname.split( '/' ).filter( Boolean );
+    const routeParts = routePattern.split( '/' ).filter( Boolean );
+
+    if ( pathParts.length !== routeParts.length ) return null;
+
+    const params = {};
+
+    for ( let i = 0; i < pathParts.length; i++ ) {
+        if ( routeParts[ i ].startsWith( ':' ) ) {
+            const key = routeParts[ i ].slice( 1 );
+            params[ key ] = pathParts[ i ];
+        } else if ( pathParts[ i ] !== routeParts[ i ] ) {
+            return null;
+        }
+    }
+
+    return params;
+}
+
+function Router ( { routes } ) {
+    const pathname = location.hash.slice( 1 ) || '/';
+
+    for ( const [ pattern, Component ] of Object.entries( routes ) ) {
+        const params = matchRoute( pathname, pattern );
+        if ( params ) {
+            return createElement( Component, { params } );
+        }
+    }
+
+    const fallback = routes[ '*' ] || ( () => createElement( 'h1', null, '404 Not Found' ) );
+    return createElement( fallback );
+}
+
+
+//________________________________________________________________________________________________//
+
 function App () {
     const [ count, setCount ] = useState( 0 );
 
@@ -186,40 +225,6 @@ rerender();
 //         { routes: { '': Home, about: About, '*': () => createElement( 'h1', null, 'Not Found' ) } }
 //     );
 // }
-
-function matchRoute ( pathname, routePattern ) {
-    const pathParts = pathname.split( '/' ).filter( Boolean );
-    const routeParts = routePattern.split( '/' ).filter( Boolean );
-
-    if ( pathParts.length !== routeParts.length ) return null;
-
-    const params = {};
-
-    for ( let i = 0; i < pathParts.length; i++ ) {
-        if ( routeParts[ i ].startsWith( ':' ) ) {
-            const key = routeParts[ i ].slice( 1 );
-            params[ key ] = pathParts[ i ];
-        } else if ( pathParts[ i ] !== routeParts[ i ] ) {
-            return null;
-        }
-    }
-
-    return params;
-}
-
-function Router ( { routes } ) {
-    const pathname = location.hash.slice( 1 ) || '/';
-
-    for ( const [ pattern, Component ] of Object.entries( routes ) ) {
-        const params = matchRoute( pathname, pattern );
-        if ( params ) {
-            return createElement( Component, { params } );
-        }
-    }
-
-    const fallback = routes[ '*' ] || ( () => createElement( 'h1', null, '404 Not Found' ) );
-    return createElement( fallback );
-}
 
 createElement( Router, {
     routes: {
