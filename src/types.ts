@@ -20,4 +20,12 @@ export type statusCodeComp = {
 
 export type Reference = {
     current: any;
+    instance?: any;
+};
+
+export type ComponentElement = {
+    type: any,
+    props?: {} | null,
+    hooks?: any[];
+    effects?: any[];
 };

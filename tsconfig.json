@@ -10,7 +10,7 @@
     ],
     "module": "ESNext", // Use ES modules (for `import`)
     "moduleResolution": "node", // Helps with modern bundlers like Vite/Webpack
-    "outDir": "./dist", // Output directory
+    "outDir": "test/dist", // Output directory
     "rootDir": "./src", // Source directory
     "esModuleInterop": true, // Allow default imports from CommonJS
     "allowSyntheticDefaultImports": true,
