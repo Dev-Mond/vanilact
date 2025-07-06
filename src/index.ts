@@ -43,16 +43,17 @@ export const isClassComponent = ( component ) => {
  * @param container 
  * @returns 
  */
-function render ( vnode, container, instance?: any ) {
+function render ( vnode, container, parentInstance?: any ) {
   let dom: any = null;
+  let instance: any = null;
   if ( typeof vnode === 'string' || typeof vnode === 'number' ) {
     if ( typeof vnode === 'string' && isHTML( vnode ) )
       dom = document.createRange().createContextualFragment( DomPurify.sanitize( vnode ) );
     else
       dom = document.createTextNode( String( vnode ) );
     if ( container ) container.appendChild( dom );
-    instance?.setDom && instance?.setDom( container );
-    instance?.onMount && instance?.onMount();
+    parentInstance?.setDom && parentInstance?.setDom( container );
+    parentInstance?.onMount && parentInstance?.onMount();
     return dom;
   }
   if ( Array.isArray( vnode ) ) {
@@ -62,20 +63,23 @@ function render ( vnode, container, instance?: any ) {
       if ( childNode ) dom.appendChild( childNode );
     } );
     if ( container ) container.appendChild( dom );
-    instance?.setDom && instance?.setDom( container );
-    instance?.onMount && instance?.onMount();
+    parentInstance?.setDom && parentInstance?.setDom( container );
+    parentInstance?.onMount && parentInstance?.onMount();
     return dom;
   }
   if ( typeof vnode.type === 'function' ) {
     if ( isClassComponent( vnode.type ) ) {
-      const instance = new vnode.type( vnode.props || {} );
+      instance = new vnode.type( vnode.props || {} );
       instance?.willMount && instance?.willMount();
       const componentVNode = instance.render();
-      return render( componentVNode, container, instance );
+      dom = render( componentVNode, container, instance );
+      parentInstance?.setDom && parentInstance?.setDom( container );
+      parentInstance?.onMount && parentInstance?.onMount();
+      return dom;
     }
     else {
       const componentVNode = vnode.type( vnode.props || {} );
-      return render( componentVNode, container, instance );
+      return render( componentVNode, container, parentInstance );
     }
   }
   dom = document.createElement( vnode.type );
@@ -106,6 +110,8 @@ function render ( vnode, container, instance?: any ) {
   if ( container ) container.appendChild( dom );
   instance?.setDom && instance?.setDom( container );
   instance?.onMount && instance?.onMount();
+  parentInstance?.setDom && parentInstance?.setDom( container );
+  parentInstance?.onMount && parentInstance?.onMount();
   return dom;
 }
 /**
@@ -337,7 +343,7 @@ export class IComponent {
   /**
    * Entry point
    */
-  constructor () { this.dom = null; }
+  constructor() { this.dom = null; }
   /**
    * Set the parent node element.
    * @param dom 
