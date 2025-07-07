@@ -1,4 +1,3 @@
-import DomPurify from 'dompurify';
 import { Reference, ComponentElement } from './types';
 /**
  * Current component instance
@@ -48,7 +47,7 @@ function render ( vnode, container, parentInstance?: any ) {
   let instance: any = null;
   if ( typeof vnode === 'string' || typeof vnode === 'number' ) {
     if ( typeof vnode === 'string' && isHTML( vnode ) )
-      dom = document.createRange().createContextualFragment( DomPurify.sanitize( vnode ) );
+      dom = document.createRange().createContextualFragment( vnode );
     else
       dom = document.createTextNode( String( vnode ) );
     if ( container ) container.appendChild( dom );
@@ -305,18 +304,42 @@ export function lazy ( importFn ) {
  * @param param0 
  * @returns 
  */
-export function Router ( { routes } ) {
+export function Router ( { routes, errorViews = [] } ) {
   const pathname = location.pathname || '/';
-
-  for ( const { path, component } of routes ) {
+  for ( const { path, component, middlewares } of routes ) {
     const params = matchRoute( pathname, path );
     if ( params ) {
+      if ( middlewares && middlewares.length > 0 ) {
+        for ( const fn of ( middlewares || [] ) ) {
+          if ( typeof fn === 'function' && !( fn() ) ) {
+            let fallback401: any = errorViews?.find( s => ( s as any ).statusCode === 401 );
+            if ( !fallback401 ) {
+              fallback401 = {
+                component: ( () =>
+                  createElement( 'center', { style: "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%)" },
+                    createElement( 'h1', null, '401 Access Denied' )
+                  )
+                )
+              };
+            }
+            return createElement( fallback401.component, fallback401.props );
+          }
+        }
+      }
       return createElement( component, { params } );
     }
   }
-
-  const fallback = routes[ '*' ] || ( () => createElement( 'h1', null, '404 Not Found' ) );
-  return createElement( fallback );
+  let fallback404: any = errorViews?.find( s => ( s as any ).statusCode === 404 );
+  if ( !fallback404 ) {
+    fallback404 = {
+      component: ( () =>
+        createElement( 'center', { style: "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%)" },
+          createElement( 'h1', null, '404 Not Found' )
+        )
+      )
+    };
+  }
+  return createElement( fallback404.component, fallback404.props );
 }
 /**
  * Entry point
@@ -343,7 +366,7 @@ export class IComponent {
   /**
    * Entry point
    */
-  constructor() { this.dom = null; }
+  constructor () { this.dom = null; }
   /**
    * Set the parent node element.
    * @param dom 

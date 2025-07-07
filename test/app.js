@@ -2,16 +2,17 @@ import { createElement as _, Router, lazy, navigate, useState } from '../dist/va
 const Home = lazy( () => import( './home.js' ) );
 const About = lazy( () => import( './about.js' ) );
 export default class App {
-    constructor () {
+    constructor() {
         [ this.count, this.setCount ] = useState( 0 );
     }
     render () {
         return _( Router, {
             routes: [
-                { path: "/", component: Home },
+                { path: "/", component: Home, middlewares: [ () => false ] },
                 { path: "/about", component: About },
-                { path: "*", component: () => createElement( 'h1', null, 'Not Found' ) }
-            ]
+                { path: "*", component: () => _( 'h1', null, 'Not Found' ) }
+            ],
+
         } );
     }
     willMount () {
