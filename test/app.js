@@ -8,7 +8,7 @@ export default class App {
     render () {
         return _( Router, {
             routes: [
-                { path: "/", component: Home, middlewares: [ () => false ] },
+                { path: "/", component: Home },
                 { path: "/about", component: About },
                 { path: "*", component: () => _( 'h1', null, 'Not Found' ) }
             ],

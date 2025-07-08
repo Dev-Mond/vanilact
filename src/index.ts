@@ -16,6 +16,10 @@ let appInstance;
  */
 let rootElement: HTMLElement;
 /**
+ * Monitor infinite call of rerender.
+ */
+let renderCount = 0;
+/**
  * Check if string is an text/html type.
  * @param {*} str 
  * @returns 
@@ -137,8 +141,12 @@ function renderComponent ( component, container ) {
  * Main render function.
  */
 function rerender () {
+  console.log( "PREV", JSON.stringify( appInstance ) );
+  if ( renderCount++ > 100 ) throw new Error( "Too many rerenders!" );
   rootElement.innerHTML = '';
   renderComponent( appInstance, rootElement );
+  renderCount = 0;
+  console.log( "NEW: ", JSON.stringify( appInstance ) );
 }
 /**
  * Change component view based or route
@@ -176,8 +184,10 @@ export function useState ( initialValue ) {
 
   const index = hookIndex;
   const setState = newValue => {
-    hooks[ index ] = newValue;
-    rerender();
+    if ( hooks[ index ] !== newValue ) {
+      hooks[ index ] = newValue;
+      rerender();
+    }
   };
 
   return [ hooks[ hookIndex++ ], setState ];
