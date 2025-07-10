@@ -2,10 +2,11 @@ import { createElement as _, lazy, createRef, useState } from './dist/vanilact.j
 const Layout = lazy( () => import( './layout.js' ) );
 // import Layout from './layout.js';
 export default class Home {
-  constructor () {
+  constructor() {
     this.button = createRef();
     this.iframe = createRef();
     [ this.count, this.setCount ] = useState( 0 );
+    throw new Error( "test" );
   }
   render () {
     return _( Layout, {},
