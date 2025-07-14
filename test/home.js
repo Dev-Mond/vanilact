@@ -6,7 +6,6 @@ export default class Home {
     this.button = createRef();
     this.iframe = createRef();
     [ this.count, this.setCount ] = useState( 0 );
-    throw new Error( "test" );
   }
   render () {
     return _( Layout, {},
