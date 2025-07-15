@@ -1,21 +1,24 @@
-import { createElement as _, lazy, createRef, useState } from './dist/vanilact.js';
+import { createElement as _, lazy, createRef, useState, onSetup } from './dist/vanilact.js';
 const Layout = lazy( () => import( './layout.js' ) );
 // import Layout from './layout.js';
+import IFrame from './iframe.js';
+import Button from './button.js';
 export default class Home {
-  constructor() {
-    this.button = createRef();
+  constructor () {
     this.iframe = createRef();
-    [ this.count, this.setCount ] = useState( 0 );
   }
   render () {
     return _( Layout, {},
       _( 'div', { class: "container", style: "margin-top: 100px" },
         _( 'div', { class: "row" },
           _( 'div', { class: "col-lg-12" },
-            _( 'button', { ref: this.button, class: "clicker", onclick: () => this.setCount( this.count + 1 ) }, 'Clicker ' + this.count ),
+            _( Button ),
+            _( 'label', null, "this is test label.." ),
+          ),
+          _( 'div', { class: "col-lg-12" },
             _( 'br' ),
-            _( 'iframe', { ref: this.iframe, width: "1000px", height: "700px", class: 'iframe', src: "#" } )
-          )
+            _( IFrame )
+          ),
         )
       )
     );
@@ -31,5 +34,8 @@ export default class Home {
     console.log( this.getDom() );
     if ( this.getDom( 'iframe.iframe' ) )
       this.getDom( 'iframe.iframe' ).src = "https://example.com/";
+    onSetup( () => {
+      console.log( 'call on setup' + this.constructor.name );
+    } );
   }
 }

@@ -1,6 +1,9 @@
-import { createElement as _, useState } from './dist/vanilact.js';
+import { createElement as _, useState, onSetup } from './dist/vanilact.js';
 export default function About () {
   const [ count, setCount ] = useState( 0 );
+  onSetup( () => {
+    console.log( 'call on setup' + this.constructor.name );
+  } );
   return _( 'div', { class: "container" },
     _( 'div', { class: "row" },
       _( 'div', { class: "col-lg-12" },

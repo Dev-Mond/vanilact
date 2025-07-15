@@ -20,11 +20,10 @@ let rootElement: HTMLElement;
  */
 let renderCount = 0;
 /**
- * Setup event list, to be able to run setup function before the app render.
+ * Previous nodes, to be able to compare and rerender only if needed.
+ * This is used in the render function.
  */
-let setupEventList: Function[] = [];
-const componentStore = new Map();
-let nextId = 0;
+let prevVNode = null;
 /**
  * Check if string is an text/html type.
  * @param {*} str 
@@ -52,48 +51,29 @@ export const isClassComponent = ( component ) => {
  * @param container 
  * @returns 
  */
-function render ( vnode, container, parentInstance?: any ) {
+function render ( vnode, container?, instance?: any ) {
   let dom: any = null;
-  let instance: any = null;
   if ( typeof vnode === 'string' || typeof vnode === 'number' ) {
     if ( typeof vnode === 'string' && isHTML( vnode ) )
       dom = document.createRange().createContextualFragment( vnode );
     else
       dom = document.createTextNode( String( vnode ) );
-    if ( container ) container.appendChild( dom );
-    parentInstance?.setDom && parentInstance?.setDom( container );
-    parentInstance?.onMount && parentInstance?.onMount();
     return dom;
   }
   if ( Array.isArray( vnode ) ) {
     dom = document.createDocumentFragment();
     vnode.forEach( child => {
-      const childNode = render( child, dom );
+      const childNode = render( child );
       if ( childNode ) dom.appendChild( childNode );
     } );
-    if ( container ) container.appendChild( dom );
-    parentInstance?.setDom && parentInstance?.setDom( container );
-    parentInstance?.onMount && parentInstance?.onMount();
     return dom;
   }
   if ( typeof vnode.type === 'function' ) {
-    if ( isClassComponent( vnode.type ) ) {
-      instance = new vnode.type( vnode.props || {} );
-      vnode.instance = instance;
-      instance?.willMount && instance?.willMount();
-      const componentVNode = instance.render();
-      registerComponent( container, vnode, componentVNode );
-      dom = render( componentVNode, container, instance );
-      parentInstance?.setDom && parentInstance?.setDom( container );
-      parentInstance?.onMount && parentInstance?.onMount();
-      return dom;
-    }
-    else {
-      const componentVNode = vnode.type( vnode.props || {} );
-      dom = render( componentVNode, container, parentInstance );
-      registerComponent( container, vnode, dom );
-      return dom;
-    }
+    return renderComponent(
+      vnode,
+      container,
+      instance
+    );
   }
   dom = document.createElement( vnode.type );
   const props = vnode.props || {};
@@ -116,15 +96,10 @@ function render ( vnode, container, parentInstance?: any ) {
 
   const children = [].concat( props.children || [] );
   children.forEach( child => {
-    const childNode = render( child, dom );
-    if ( childNode ) dom.appendChild( childNode );
+    const childNode = render( child );
+    if ( childNode ) dom.append( childNode );
   } );
-
-  if ( container ) container.appendChild( dom );
-  instance?.setDom && instance?.setDom( container );
-  instance?.onMount && instance?.onMount();
-  parentInstance?.setDom && parentInstance?.setDom( container );
-  parentInstance?.onMount && parentInstance?.onMount();
+  instance?.setDom?.( dom );
   return dom;
 }
 /**
@@ -132,25 +107,57 @@ function render ( vnode, container, parentInstance?: any ) {
  * @param component 
  * @param container 
  */
-function renderComponent ( component, container ) {
+function renderComponent ( component, container, parentInstance?, isInitial = true ) {
+  component.__parent = container;
   currentComponent = component;
-  componentStore.clear();
   hookIndex = 0;
-  nextId = 0;
-  let output = null;
-  let instance = null;
+  console.log( "Rendering component:", component.type.name || component.type );
   if ( isClassComponent( component.type ) ) {
-    instance = new component.type( component.props );
-    component.instance = instance;
-    ( instance as any )?.willMount && ( instance as any )?.willMount();
-    output = ( instance as any ).render();
+    const instance = new component.type( component.props || {} );
+    component.__instance = instance;
+    instance?.willMount?.();
+
+    const vNode = instance.render();
+    component.__dom = vNode;
+    const dom = render( vNode, container, instance );
+    instance?.setDom?.( dom );
+    if ( isInitial ) instance.onMount?.();
+
+    container.append( dom );
   }
   else {
-    output = component.type( component.props );
+    component.willMount?.();
+    const componentVNode = component.type( component.props || {} );
+    component.__dom = componentVNode;
+    const dom = render( componentVNode, container, component );
+    component.setDom?.( dom );
+    if ( isInitial ) component.onMount?.();
+
+    container.append( dom );
   }
-  registerComponent( container, component, output );
-  render( output, container, instance );
   runEffects( component );
+  console.log( "Component Rendered:", component.type.name || component.type );
+}
+/**
+ * Create component structure.
+ * @param type 
+ * @param props 
+ * @param parentDom 
+ * @returns 
+ */
+function createComponentInstance ( type, props, parentDom?: any ) {
+  return {
+    type,
+    props,
+    dom: null,
+    vnode: null,
+    hooks: [],
+    effects: [],
+    setDom ( dom ) { this.dom = dom; },
+    onMount () { },
+    willMount () { },
+    __parentDom: parentDom
+  };
 }
 /**
  * Main render function.
@@ -158,19 +165,14 @@ function renderComponent ( component, container ) {
 function rerender () {
   if ( renderCount++ > 100 ) throw new Error( "Too many rerenders!" );
   rootElement.innerHTML = '';
-  renderComponent( appInstance, rootElement );
-  if ( setupEventList && setupEventList.length > 0 ) {
-    for ( const fn of setupEventList ) {
-      if ( typeof fn === 'function' ) {
-        try {
-          fn();
-        } catch ( e ) {
-          console.error( ( e as any ).stack );
-        }
-      }
-    }
-    setupEventList = [];
+  // const newVNode = appInstance.type( appInstance.props );
+
+  if ( !prevVNode ) {
+    renderComponent( appInstance, rootElement );
+  } else {
+    // patch(rootElement, prevVNode, newVNode); // optional — coming next
   }
+  // prevVNode = newVNode;
   renderCount = 0;
 }
 /**
@@ -199,20 +201,6 @@ function matchRoute ( pathname, routePattern ) {
   return params;
 }
 /**
- * Register component instance to the store.
- * @param container 
- * @param instance 
- * @returns 
- */
-function registerComponent ( container, componentNode, dom ) {
-  const id = nextId++;
-  componentStore.set( id, { container, componentNode } );
-  componentNode.container = container;
-  componentNode.__id = id;
-  componentNode.__dom = dom;
-  return id;
-}
-/**
  * Hook identifier. To be able to manipulate rendering cycle
  * @param initialValue 
  * @returns 
@@ -222,10 +210,10 @@ export function useState ( initialValue ) {
   if ( hooks[ hookIndex ] === undefined ) hooks[ hookIndex ] = initialValue;
 
   const index = hookIndex;
-  const setState = ( newValue ) => {
+  const setState = newValue => {
     if ( hooks[ index ] !== newValue ) {
       hooks[ index ] = newValue;
-      rerender();
+      renderComponent( currentComponent, currentComponent.__parent, currentComponent.__instance );
     }
   };
 
@@ -277,7 +265,51 @@ function runEffects ( component ) {
  * @returns 
  */
 export function createElement ( type, props: {} | null = {}, ...children ) {
+  // if ( typeof type === 'function' && !type.__forceRender && !isClassComponent( type ) ) {
+  //   type = memo( type );
+  // }
+  if ( typeof type === 'function' || isClassComponent( type ) ) {
+    return createComponentInstance( type, { ...props, children } );
+  }
   return { type, props: { ...props, children } };
+}
+/**
+ * Check if two objects are shallow equal.
+ * @param objA 
+ * @param objB 
+ * @returns 
+ */
+function shallowEqual ( objA, objB ) {
+  if ( objA === objB ) return true;
+  if ( !objA || !objB || typeof objA !== 'object' || typeof objB !== 'object' ) return false;
+
+  const keysA = Object.keys( objA );
+  const keysB = Object.keys( objB );
+  if ( keysA.length !== keysB.length ) return false;
+
+  for ( let key of keysA ) {
+    if ( objA[ key ] !== objB[ key ] ) return false;
+  }
+
+  return true;
+}
+/**
+ * Use current instance for rendering and dont create new instance.
+ * @param Component 
+ * @returns 
+ */
+function memo ( Component ) {
+  let prevProps = null;
+  let cachedVNode = null;
+
+  return function Memoized ( props ) {
+    if ( cachedVNode && shallowEqual( prevProps, props ) ) {
+      return cachedVNode;
+    }
+    prevProps = props;
+    cachedVNode = Component( props );
+    return cachedVNode;
+  };
 }
 /**
  * Location Navigator.
@@ -346,7 +378,7 @@ export function lazy ( importFn ) {
       return createElement( 'div' );
     }
 
-    return createElement( LoadedComponent, props, ...( props.children || [] ) );
+    return createComponentInstance( LoadedComponent, props );
   };
 }
 /**
@@ -468,12 +500,3 @@ export const createRef = ( initial = null ) => {
  * @returns 
  */
 export const Fragment = ( { children } ) => children;
-/**
- * Call after the renderer is completed.
- * @param fn 
- */
-export const onSetup = ( fn: Function ) => {
-  if ( typeof fn === 'function' ) {
-    setupEventList.push( fn );
-  }
-}

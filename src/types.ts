@@ -28,4 +28,9 @@ export type ComponentElement = {
     props?: {} | null,
     hooks?: any[];
     effects?: any[];
+    hookIndex?: number;
+    container?: HTMLElement | Node | null;
+    instance?: any;
+    __id?: number;
+    __dom?: HTMLElement | Node | null;
 };
