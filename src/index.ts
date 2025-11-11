@@ -107,6 +107,15 @@ function render ( vnode, container, parentInstance?: any ) {
         value.current = dom;
       }
     }
+    else if ( key === 'style' && value && typeof value === 'object' ) {
+      const newValue = Object.entries( value )
+        .map( ( [ k, v ] ) => {
+          const kebabKey = k.replace( /([A-Z])/g, '-$1' ).toLowerCase();
+          return `${ kebabKey }: ${ v };`;
+        } )
+        .join( ' ' );
+      dom.setAttribute( key, newValue );
+    }
     else if ( key.startsWith( 'on' ) && typeof value === 'function' ) {
       dom.addEventListener( key.slice( 2 ).toLowerCase(), value );
     } else if ( key !== 'children' ) {
