@@ -1,4 +1,4 @@
-import { createApp, createElement as _, lazy } from './dist/vanilact.js';
-const App = lazy( () => import( './app.js' ) );
+import { createApp, createElement as _, } from './dist/vanilact.js';
+import App from './app.js';
 createApp( document.getElementById( 'root' ) )
-    .render( App ); 
+    .render( _( App ) ); 

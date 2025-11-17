@@ -33,4 +33,5 @@ export type ComponentElement = {
     instance?: any;
     __id?: number;
     __dom?: HTMLElement | Node | null;
+    children?: []
 };

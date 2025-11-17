@@ -1,187 +1,602 @@
-import { Reference, ComponentElement } from './types';
 /**
- * Current component instance
+ * Refresent the virtual DOM
  */
-let currentComponent: ComponentElement;
+interface VNode {
+  type: string | Function | symbol;
+  props: {
+    [ key: string ]: any;
+    children: VNode[];
+    ref?: { current: any };
+  };
+}
+
 /**
- * Renderer hook, to identify if rerender have to occur.
+ * Internal fiber structure for reconciliation
  */
-let hookIndex = 0;
+interface Fiber {
+  type?: string | Function | symbol;
+  props: { [ key: string ]: any; children: VNode[]; ref?: { current: any }; };
+  dom?: HTMLElement | Text | null | undefined;
+  parent?: Fiber | null | undefined;
+  child?: Fiber | null | undefined;
+  sibling?: Fiber | null | undefined;
+  alternate?: Fiber | null | undefined;
+  effectTag?: "UPDATE" | "PLACEMENT" | "DELETION";
+  hooks?: Hook[];
+  instance?: IComponent | null;
+}
+
 /**
- * Main app instance
+ * Hook for useState
  */
-let appInstance;
+interface Hook {
+  state?: any;
+  queue?: ( ( state: any ) => any )[];
+  deps?: any[];
+  cleanup?: () => void;
+  ref?: { current: any };
+}
+
 /**
- * Root element. HTML element node that is integrated in dom.
+ * Global variables
  */
-let rootElement: HTMLElement;
+let nextUnitOfWork: Fiber | null = null;
+let currentRoot: Fiber | null = null;
+let wipRoot: Fiber | null = null;
+let deletions: Fiber[] = [];
+let wipFiber: Fiber | null = null;
+let hookIndex: number = 0;
+let pendingEffects: ( () => void )[] = [];
+
 /**
- * Monitor infinite call of rerender.
- */
-let renderCount = 0;
-/**
- * Setup event list, to be able to run setup function before the app render.
- */
-let setupEventList: Function[] = [];
-const componentStore = new Map();
-let nextId = 0;
-/**
- * Check if string is an text/html type.
- * @param {*} str 
+ * Check if key is an event
+ * @param key 
  * @returns 
  */
-export const isHTML = ( str ) => {
-  const doc = new DOMParser().parseFromString( str, "text/html" );
-  return Array.from( doc.body.childNodes ).some( node => node.nodeType === 1 );
-};
+const isEvent = ( key: string ): boolean => key.startsWith( "on" );
 /**
- * Check if the element is type of component.
- * @param {*} component 
+ * Check if key is a property
+ * @param key 
  * @returns 
  */
-export const isClassComponent = ( component ) => {
-  return (
-    typeof component === 'function' &&
-    component.prototype &&
-    component.prototype.render
-  );
-};
+const isProperty = ( key: string ): boolean => key !== "children" && key !== "ref" && !isEvent( key );
 /**
- * Render component to the dom.
- * @param vnode 
- * @param container 
+ * Check if the property or attribute is new
+ * @param prev 
+ * @param next 
  * @returns 
  */
-function render ( vnode, container, parentInstance?: any ) {
-  let dom: any = null;
-  let instance: any = null;
-  if ( typeof vnode === 'string' || typeof vnode === 'number' ) {
-    if ( typeof vnode === 'string' && isHTML( vnode ) )
-      dom = document.createRange().createContextualFragment( vnode );
-    else
-      dom = document.createTextNode( String( vnode ) );
-    if ( container ) container.appendChild( dom );
-    parentInstance?.setDom && parentInstance?.setDom( container );
-    parentInstance?.onMount && parentInstance?.onMount();
-    return dom;
-  }
-  if ( Array.isArray( vnode ) ) {
-    dom = document.createDocumentFragment();
-    vnode.forEach( child => {
-      const childNode = render( child, dom );
-      if ( childNode ) dom.appendChild( childNode );
-    } );
-    if ( container ) container.appendChild( dom );
-    parentInstance?.setDom && parentInstance?.setDom( container );
-    parentInstance?.onMount && parentInstance?.onMount();
-    return dom;
-  }
-  if ( typeof vnode.type === 'function' ) {
-    if ( isClassComponent( vnode.type ) ) {
-      instance = new vnode.type( vnode.props || {} );
-      vnode.instance = instance;
-      instance?.willMount && instance?.willMount();
-      const componentVNode = instance.render();
-      registerComponent( container, vnode, componentVNode );
-      dom = render( componentVNode, container, instance );
-      parentInstance?.setDom && parentInstance?.setDom( container );
-      parentInstance?.onMount && parentInstance?.onMount();
-      return dom;
-    }
-    else {
-      const componentVNode = vnode.type( vnode.props || {} );
-      dom = render( componentVNode, container, parentInstance );
-      registerComponent( container, vnode, dom );
-      return dom;
-    }
-  }
-  dom = document.createElement( vnode.type );
-  const props = vnode.props || {};
+const isNew = ( prev: { [ key: string ]: any; }, next: { [ key: string ]: any; } ) => ( key: string ): boolean => prev[ key ] !== next[ key ];
+/**
+ * Check if the property or attribute is removed
+ * @param prev 
+ * @param next 
+ * @returns 
+ */
+const isGone = ( prev: { [ key: string ]: any; }, next: { [ key: string ]: any; } ) => ( key: string ): boolean => !( key in next );
+/**
+ * Use to create fragment node.
+ */
+const Fragment = Symbol( 'react.fragment' );
 
-  // Set attributes and event listeners
-  for ( const [ key, value ] of Object.entries( props ) ) {
-    if ( key == 'ref' ) {
-      if ( typeof value === 'function' ) {
-        value( dom );
-      } else if ( typeof value === 'object' && value !== null && 'current' in value ) {
-        value.current = dom;
-      }
-    }
-    else if ( key === 'style' && value && typeof value === 'object' ) {
-      const newValue = Object.entries( value )
-        .map( ( [ k, v ] ) => {
-          const kebabKey = k.replace( /([A-Z])/g, '-$1' ).toLowerCase();
-          return `${ kebabKey }: ${ v };`;
-        } )
-        .join( ' ' );
-      dom.setAttribute( key, newValue );
-    }
-    else if ( key.startsWith( 'on' ) && typeof value === 'function' ) {
-      dom.addEventListener( key.slice( 2 ).toLowerCase(), value );
-    } else if ( key !== 'children' ) {
-      dom.setAttribute( key, value );
-    }
+/**
+ * Class Component Interface
+ */
+class IComponent {
+  props: any;
+  state: any;
+  _fiber: Fiber | null = null;
+
+  constructor( props: any ) {
+    this.props = props;
+    this.state = {};
   }
 
-  const children = [].concat( props.children || [] );
-  children.forEach( child => {
-    const childNode = render( child, dom );
-    if ( childNode ) dom.appendChild( childNode );
-  } );
+  setState ( partialState: any ) {
+    this.state = { ...this.state, ...partialState };
+    wipRoot = {
+      dom: currentRoot!.dom,
+      props: currentRoot!.props,
+      alternate: currentRoot
+    };
+    console.log( wipRoot );
+    nextUnitOfWork = wipRoot;
+    deletions = [];
+  }
 
-  if ( container ) container.appendChild( dom );
-  instance?.setDom && instance?.setDom( container );
-  instance?.onMount && instance?.onMount();
-  parentInstance?.setDom && parentInstance?.setDom( container );
-  parentInstance?.onMount && parentInstance?.onMount();
+  render (): VNode | null {
+    return null;
+  }
+
+  onMount () { }
+  onUpdate () { }
+  onUnmount () { }
+}
+
+/**
+ * Create VNode object
+ * @param type 
+ * @param props 
+ * @param children 
+ * @returns 
+ */
+function createElement ( type: string | Function | symbol, props: { [ key: string ]: any; } | null, ...children: ( VNode | string | number )[] ): VNode {
+  return {
+    type,
+    props: {
+      ...props,
+      children: children.map( child =>
+        typeof child === "object"
+          ? child
+          : createTextElement( child )
+      ),
+    },
+  };
+}
+
+/**
+ * Create VNode object that handles string
+ * @param text 
+ * @returns 
+ */
+function createTextElement ( text: string | number ): VNode {
+  return {
+    type: "TEXT_ELEMENT",
+    props: {
+      nodeValue: text,
+      children: [],
+    },
+  };
+}
+
+/**
+ * Create DOM element
+ * @param fiber 
+ * @returns 
+ */
+function createDom ( fiber: Fiber ): HTMLElement | Text {
+  const dom =
+    fiber.type === "TEXT_ELEMENT"
+      ? document.createTextNode( "" )
+      : document.createElement( fiber.type as string );
+
+  updateDom( dom, {}, fiber.props );
+
   return dom;
 }
+
 /**
- * Store and render component and run effects.
- * @param component 
+ * Update dom element attribute
+ * @param dom 
+ * @param prevProps 
+ * @param nextProps 
+ */
+function updateDom ( dom: HTMLElement | Text, prevProps: { [ key: string ]: any; }, nextProps: { [ key: string ]: any; } ): void {
+  const normalizedNextProps = { ...nextProps };
+  if ( normalizedNextProps.class ) {
+    normalizedNextProps.className = normalizedNextProps.class;
+    delete normalizedNextProps.class;
+  }
+  // Remove old or changed event listeners
+  Object.keys( prevProps )
+    .filter( isEvent )
+    .filter(
+      ( key: string ) =>
+        !( key in normalizedNextProps ) ||
+        isNew( prevProps, normalizedNextProps )( key )
+    )
+    .forEach( ( name: string ) => {
+      const eventType = name.toLowerCase().substring( 2 );
+      dom.removeEventListener(
+        eventType,
+        prevProps[ name ]
+      );
+    } );
+
+  // Remove old properties
+  Object.keys( prevProps )
+    .filter( isProperty )
+    .filter( isGone( prevProps, normalizedNextProps ) )
+    .forEach( ( name: string ) => {
+      if ( name.includes( '-' ) ) {
+        ( dom as HTMLElement ).removeAttribute( name );
+      } else if ( name === 'className' ) {
+        ( dom as HTMLElement ).className = '';
+      } else {
+        ( dom as any )[ name ] = '';
+      }
+    } );
+
+  // Set new or changed properties
+  Object.keys( normalizedNextProps )
+    .filter( isProperty )
+    .filter( isNew( prevProps, normalizedNextProps ) )
+    .forEach( ( name: string ) => {
+      if ( name.includes( '-' ) ) {
+        ( dom as HTMLElement ).setAttribute( name, normalizedNextProps[ name ] );
+      } else if ( name === 'style' && typeof normalizedNextProps[ name ] === 'object' ) {
+        Object.assign( ( dom as HTMLElement ).style, normalizedNextProps[ name ] );
+      } else {
+        ( dom as any )[ name ] = normalizedNextProps[ name ];
+      }
+    } );
+
+  // Add event listeners
+  Object.keys( normalizedNextProps )
+    .filter( isEvent )
+    .filter( isNew( prevProps, normalizedNextProps ) )
+    .forEach( ( name: string ) => {
+      const eventType = name.toLowerCase().substring( 2 );
+      dom.addEventListener(
+        eventType,
+        normalizedNextProps[ name ]
+      );
+    } );
+}
+
+/**
+ * Mount the virtual dom to the dom
+ */
+function commitRoot (): void {
+  deletions.forEach( commitWork );
+  commitWork( wipRoot!.child! );
+  currentRoot = wipRoot;
+  wipRoot = null;
+
+  // Run pending effects after commit
+  pendingEffects.forEach( effect => effect() );
+  pendingEffects = [];
+
+  // Call lifecycle methods for class component
+  callLifecycleMethods( wipRoot );
+}
+/**
+ * Call class component lifecycle
+ * @param fiber 
+ * @returns 
+ */
+function callLifecycleMethods ( fiber: Fiber | null | undefined ) {
+  if ( !fiber ) return;
+  if ( fiber.instance ) {
+    if ( fiber.effectTag === "PLACEMENT" ) {
+      fiber.instance.onMount();
+    } else if ( fiber.effectTag === "UPDATE" ) {
+      fiber.instance.onUpdate();
+    }
+  }
+  callLifecycleMethods( fiber.child );
+  callLifecycleMethods( fiber.sibling );
+}
+
+/**
+ * Apply the effect tag or render and update nodes
+ * @param fiber 
+ * @returns 
+ */
+function commitWork ( fiber: Fiber | null | undefined ): void {
+  if ( !fiber ) {
+    return;
+  }
+
+  let domParentFiber: Fiber = fiber.parent!;
+  while ( !domParentFiber.dom ) {
+    domParentFiber = domParentFiber.parent!;
+  }
+  const domParent = domParentFiber.dom!;
+
+  if (
+    fiber.effectTag === "PLACEMENT" &&
+    fiber.dom != null
+  ) {
+    domParent.appendChild( fiber.dom );
+  } else if (
+    fiber.effectTag === "UPDATE" &&
+    fiber.dom != null
+  ) {
+    updateDom(
+      fiber.dom,
+      fiber.alternate!.props,
+      fiber.props
+    );
+  } else if ( fiber.effectTag === "DELETION" ) {
+    if ( fiber.instance ) {
+      fiber.instance.onUnmount();
+    }
+    commitDeletion( fiber, domParent );
+  }
+
+  commitWork( fiber.child );
+  commitWork( fiber.sibling );
+}
+
+/**
+ * Remove all queued element or attribute
+ * @param fiber 
+ * @param domParent 
+ */
+function commitDeletion ( fiber: Fiber, domParent: HTMLElement | Text ): void {
+  if ( fiber.dom ) {
+    domParent.removeChild( fiber.dom );
+  } else {
+    commitDeletion( fiber.child!, domParent );
+  }
+}
+
+/**
+ * Signal requestIdleCallback execute the work.
+ * @param element 
  * @param container 
  */
-function renderComponent ( component, container ) {
-  currentComponent = component;
-  componentStore.clear();
-  hookIndex = 0;
-  nextId = 0;
-  let output = null;
-  let instance = null;
-  if ( isClassComponent( component.type ) ) {
-    instance = new component.type( component.props );
-    component.instance = instance;
-    ( instance as any )?.willMount && ( instance as any )?.willMount();
-    output = ( instance as any ).render();
-  }
-  else {
-    output = component.type( component.props );
-  }
-  registerComponent( container, component, output );
-  render( output, container, instance );
-  runEffects( component );
+function render ( element: VNode, container: HTMLElement ): void {
+  wipRoot = {
+    dom: container,
+    props: {
+      children: [ element ],
+    },
+    alternate: currentRoot,
+  };
+  deletions = [];
+  nextUnitOfWork = wipRoot;
 }
+
 /**
- * Main render function.
+ * Render loop.
+ * @param deadline 
  */
-function rerender () {
-  if ( renderCount++ > 100 ) throw new Error( "Too many rerenders!" );
-  rootElement.innerHTML = '';
-  renderComponent( appInstance, rootElement );
-  if ( setupEventList && setupEventList.length > 0 ) {
-    for ( const fn of setupEventList ) {
-      if ( typeof fn === 'function' ) {
-        try {
-          fn();
-        } catch ( e ) {
-          console.error( ( e as any ).stack );
-        }
-      }
-    }
-    setupEventList = [];
+function workLoop ( deadline: IdleDeadline ): void {
+  let shouldYield = false;
+  while ( nextUnitOfWork && !shouldYield ) {
+    nextUnitOfWork = performUnitOfWork(
+      nextUnitOfWork
+    );
+    shouldYield = deadline.timeRemaining() < 1;
   }
-  renderCount = 0;
+
+  if ( !nextUnitOfWork && wipRoot ) {
+    commitRoot();
+  }
+
+  requestIdleCallback( workLoop );
 }
+
+/**
+ * Render each fiber without blocking the thread process
+ * @param fiber 
+ * @returns 
+ */
+function performUnitOfWork ( fiber: Fiber ): Fiber | null {
+  const isFunctionComponent =
+    typeof fiber.type === "function";
+  if ( isFunctionComponent ) {
+    if ( ( fiber.type as Function ).prototype instanceof IComponent ) {
+      updateClassComponent( fiber );
+    } else {
+      updateFunctionComponent( fiber );
+    }
+  } else if ( fiber.type === Fragment ) {
+    updateFragmentComponent( fiber );
+  } else {
+    updateHostComponent( fiber );
+  }
+  if ( fiber.child ) {
+    return fiber.child;
+  }
+  let nextFiber: Fiber | null = fiber;
+  while ( nextFiber ) {
+    if ( nextFiber.sibling ) {
+      return nextFiber.sibling;
+    }
+    nextFiber = nextFiber.parent!;
+  }
+  return null;
+}
+
+/**
+ * Update function component
+ * @param fiber 
+ */
+function updateFunctionComponent ( fiber: Fiber ): void {
+  wipFiber = fiber;
+  hookIndex = 0;
+  wipFiber.hooks = [];
+  const children = [ typeof fiber.type === 'function' ? fiber.type( fiber.props ) : null ].filter( e => e );
+  reconcileChildren( fiber, children );
+}
+
+/**
+ * Update class component
+ * @param fiber 
+ */
+function updateClassComponent ( fiber: Fiber ): void {
+  const ComponentClass = fiber.type as any;
+  if ( !fiber.instance ) {
+    fiber.instance = new ComponentClass( fiber.props );
+    fiber.instance!._fiber = fiber;
+  } else {
+    fiber.instance.props = fiber.props;
+  }
+  const children = [ fiber.instance!.render() ].filter( e => e ) as VNode[];
+  reconcileChildren( fiber, children );
+}
+
+/**
+ * Update fragment
+ * @param fiber 
+ */
+function updateFragmentComponent ( fiber: Fiber ): void {
+  reconcileChildren( fiber, fiber.props.children );
+}
+
+/**
+ * Call rerender action and update data.
+ * @param initial 
+ * @returns 
+ */
+function useState<T> ( initial: T ): [ T, ( action: ( state: T ) => T ) => void ] {
+  const oldHook =
+    wipFiber!.alternate &&
+    wipFiber!.alternate.hooks &&
+    wipFiber!.alternate.hooks[ hookIndex ];
+  const hook: Hook = {
+    state: oldHook ? oldHook.state : initial,
+    queue: [],
+  };
+
+  const actions = oldHook ? oldHook.queue : [];
+  actions!.forEach( ( action: ( state: any ) => any ) => {
+    hook.state = action( hook.state );
+  } );
+
+  const setState = ( action: ( state: T ) => T ) => {
+    hook.queue!.push( action );
+    wipRoot = {
+      dom: currentRoot!.dom,
+      props: currentRoot!.props,
+      alternate: currentRoot,
+    };
+    nextUnitOfWork = wipRoot;
+    deletions = [];
+  };
+
+  wipFiber!.hooks!.push( hook );
+  hookIndex++;
+  return [ hook.state, setState ];
+}
+
+/**
+ * Update parent component
+ * @param fiber 
+ */
+function updateHostComponent ( fiber: Fiber ): void {
+  if ( !fiber.dom ) {
+    fiber.dom = createDom( fiber );
+  }
+  if ( fiber.props.ref ) {
+    fiber.props.ref.current = fiber.dom;
+  }
+  reconcileChildren( fiber, fiber.props.children );
+}
+
+/**
+ * Update VNode children
+ * @param wipFiber 
+ * @param elements 
+ */
+function reconcileChildren ( wipFiber: Fiber, elements: VNode[] ): void {
+  let index = 0;
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
+  let prevSibling: Fiber | null = null;
+
+  while ( index < elements.length || oldFiber != null ) {
+    const element = elements[ index ];
+    let newFiber: Fiber | null = null;
+
+    const sameType =
+      oldFiber &&
+      element &&
+      element.type === oldFiber.type;
+
+    if ( sameType ) {
+      newFiber = {
+        type: oldFiber!.type,
+        props: element.props,
+        dom: oldFiber!.dom,
+        parent: wipFiber,
+        alternate: oldFiber,
+        effectTag: "UPDATE",
+      };
+    }
+    if ( element && !sameType ) {
+      newFiber = {
+        type: element.type,
+        props: element.props,
+        dom: null,
+        parent: wipFiber,
+        alternate: null,
+        effectTag: "PLACEMENT",
+      };
+    }
+    if ( oldFiber && !sameType ) {
+      oldFiber.effectTag = "DELETION";
+      deletions.push( oldFiber );
+    }
+
+    if ( oldFiber ) {
+      oldFiber = oldFiber.sibling;
+    }
+
+    if ( index === 0 ) {
+      wipFiber.child = newFiber;
+    } else if ( element ) {
+      prevSibling!.sibling = newFiber;
+    }
+
+    prevSibling = newFiber;
+    index++;
+  }
+}
+
+/**
+ * Check if previous value is the same to the new value.
+ * @param a 
+ * @param b 
+ * @returns 
+ */
+function depsEqual ( a: any[], b: any[] ): boolean {
+  if ( a.length !== b.length ) return false;
+  return a.every( ( val, i ) => val === b[ i ] );
+}
+
+/**
+ * Run post action or callback
+ * @param effect 
+ * @param deps 
+ */
+function useEffect ( effect: () => void | ( () => void ), deps: any[] ): void {
+  const oldHook =
+    wipFiber!.alternate &&
+    wipFiber!.alternate.hooks &&
+    wipFiber!.alternate.hooks[ hookIndex ];
+  const hasChanged = !oldHook || !depsEqual( oldHook.deps!, deps );
+  const hook: Hook = {
+    deps,
+    cleanup: oldHook?.cleanup,
+  };
+  wipFiber!.hooks!.push( hook );
+  if ( hasChanged ) {
+    if ( oldHook?.cleanup ) {
+      oldHook.cleanup!();
+    }
+    pendingEffects.push( () => {
+      const cleanup = effect();
+      if ( typeof cleanup === "function" ) {
+        hook.cleanup = cleanup;
+      }
+    } );
+  }
+  hookIndex++;
+}
+
+/**
+ * Load component asyncronously
+ * @param loader 
+ * @returns 
+ */
+function lazy ( loader: () => Promise<any> ): Function {
+  return function LazyComponent ( props: any ) {
+    const [ Component, setComponent ] = useState<any>( null );
+    useEffect( () => {
+      loader().then( ( module ) => {
+        setComponent( prev => prev = module.default || module );
+      } );
+    }, [] );
+    if ( !Component ) {
+      return createElement( "div", null, "" );
+    }
+    return createElement( Component, props );
+  };
+}
+
 /**
  * Change component view based or route
  * @param pathname 
@@ -207,166 +622,21 @@ function matchRoute ( pathname, routePattern ) {
 
   return params;
 }
-/**
- * Register component instance to the store.
- * @param container 
- * @param instance 
- * @returns 
- */
-function registerComponent ( container, componentNode, dom ) {
-  const id = nextId++;
-  componentStore.set( id, { container, componentNode } );
-  componentNode.container = container;
-  componentNode.__id = id;
-  componentNode.__dom = dom;
-  return id;
-}
-/**
- * Hook identifier. To be able to manipulate rendering cycle
- * @param initialValue 
- * @returns 
- */
-export function useState ( initialValue ) {
-  const hooks = currentComponent.hooks || ( currentComponent.hooks = [] );
-  if ( hooks[ hookIndex ] === undefined ) hooks[ hookIndex ] = initialValue;
 
-  const index = hookIndex;
-  const setState = ( newValue ) => {
-    if ( hooks[ index ] !== newValue ) {
-      hooks[ index ] = newValue;
-      rerender();
-    }
-  };
-
-  return [ hooks[ hookIndex++ ], setState ];
-}
-/**
- * Extension of state.
- * @param callback 
- * @param deps 
- */
-export function useEffect ( callback, deps ) {
-  const hooks = currentComponent.hooks || ( currentComponent.hooks = [] );
-  const prev = hooks[ hookIndex ];
-
-  const hasChanged = !prev || !deps || deps.some( ( d, i ) => d !== prev.deps[ i ] );
-
-  if ( hasChanged ) {
-    hooks[ hookIndex ] = { callback, deps, cleanup: null };
-    currentComponent.effects ||= [];
-    currentComponent.effects.push( hookIndex ); // save index to run later
-  }
-
-  hookIndex++;
-}
-/**
- * Post Running of all effects create from last render.
- * @param component 
- */
-function runEffects ( component ) {
-  const hooks = component.hooks;
-  const indices = component.effects || [];
-
-  for ( const i of indices ) {
-    const effect = hooks[ i ];
-    if ( effect.cleanup ) effect.cleanup(); // Clean up previous
-    const cleanup = effect.callback();
-    if ( typeof cleanup === 'function' ) {
-      effect.cleanup = cleanup;
-    }
-  }
-
-  component.effects = []; // clear for next render cycle
-}
-/**
- * To create renderable component.
- * @param type 
- * @param props 
- * @param children 
- * @returns 
- */
-export function createElement ( type, props: {} | null = {}, ...children ) {
-  return { type, props: { ...props, children } };
-}
-/**
- * Location Navigator.
- * To be able to change render whatever the location is change.
- * @returns 
- */
-export function useLocation () {
-  const [ loc, setLoc ] = useState( () => location.pathname );
-
-  useEffect( () => {
-    const onChange = () => setLoc( location.pathname );
-    window.addEventListener( 'popstate', onChange );
-
-    return () => window.addEventListener( 'popstate', onChange );
-  }, [] );
-
-  return loc;
-}
-/**
- * Change location/URL
- * @param path 
- */
-export function navigate ( path, params = {} ) {
-  let arrParams: string[] = [];
-  if ( params ) {
-    Object.entries( params ).map( ( [ k, v ] ) => {
-      arrParams.push( `${ encodeURIComponent( decodeURIComponent( k ) ) }=${ encodeURIComponent( decodeURIComponent( v as string ) ) }` );
-    } );
-  }
-  history.pushState( {}, '', [ path, arrParams.filter( e => e ).join( "&" ) ].filter( e => e ).join( "?" ) );
-  rerender();
-}
-/**
- * To be able to handle dynamic import.
- * @param importFn 
- * @returns 
- */
-export function lazy ( importFn ) {
-  let LoadedComponent = null;
-  let loading = false;
-  let error = null;
-
-  return function LazyWrapper ( props ) {
-    const [ _, forceUpdate ] = useState( 0 );
-
-    if ( !LoadedComponent && !loading ) {
-      loading = true;
-
-      importFn()
-        .then( module => {
-          LoadedComponent = module.default;
-          forceUpdate( x => x + 1 ); // trigger re-render once loaded
-        } )
-        .catch( err => {
-          error = err;
-          forceUpdate( x => x + 1 );
-        } );
-    }
-
-    if ( error ) {
-      console.error( ( error as any ).stack );
-      return createElement( 'div' );
-    }
-
-    if ( !LoadedComponent ) {
-      return createElement( 'div' );
-    }
-
-    return createElement( LoadedComponent, props, ...( props.children || [] ) );
-  };
-}
 /**
  * Route component that will be use in component based routing
  * @param param0 
  * @returns 
  */
-export function Router ( { routes, errorViews = [] } ) {
-  const pathname = location.pathname || '/';
+function Router ( { routes, errorViews = [] }: { routes: { path: string; component: Function, middlewares: ( () => boolean )[] }[], errorViews: { path: string; component: Function }[] } ) {
+  const [ currentPath, setCurrentPath ] = useState( window.location.pathname );
+  useEffect( () => {
+    const handler = () => setCurrentPath( window.location.pathname as any );
+    window.addEventListener( "popstate", handler );
+    return () => window.removeEventListener( "popstate", handler );
+  }, [] );
   for ( const { path, component, middlewares } of routes ) {
-    const params = matchRoute( pathname, path );
+    const params = matchRoute( currentPath, path );
     if ( params ) {
       if ( middlewares && middlewares.length > 0 ) {
         for ( const fn of ( middlewares || [] ) ) {
@@ -376,7 +646,7 @@ export function Router ( { routes, errorViews = [] } ) {
               fallback401 = {
                 component: ( () =>
                   createElement( 'center', { style: "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%)" },
-                    createElement( 'h1', null, '401 Access Denied' )
+                    createElement( 'h1', {}, '401 Access Denied' )
                   )
                 )
               };
@@ -388,101 +658,102 @@ export function Router ( { routes, errorViews = [] } ) {
       return createElement( component, { params } );
     }
   }
+
   let fallback404: any = errorViews?.find( s => ( s as any ).statusCode === 404 );
   if ( !fallback404 ) {
     fallback404 = {
       component: ( () =>
         createElement( 'center', { style: "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%)" },
-          createElement( 'h1', null, '404 Not Found' )
+          createElement( 'h1', {}, '404 Not Found' )
         )
       )
     };
   }
   return createElement( fallback404.component, fallback404.props );
 }
-/**
- * Entry point
- */
-export function createApp ( root: HTMLElement ) {
-  rootElement = root;
-  return {
-    render ( component ) {
-      appInstance = { type: component, props: {}, hooks: [] };
-      rerender();
-      window.addEventListener( 'popstate', rerender );
-    }
-  };
-}
 
 /**
- * Component based to identify what is being used in render function.
+ * Trigger change of page event
+ * @param to 
+ * @param params 
  */
-export class IComponent {
-  /**
-   * Store the parent node element.
-   */
-  dom: any;
-  /**
-   * Entry point
-   */
-  constructor() { this.dom = null; }
-  /**
-   * Set the parent node element.
-   * @param dom 
-   */
-  setDom ( dom ) { this.dom = dom; }
-  /**
-   * Get the dom or the specific element from the dom children
-   * This method use querySelector in finding the element.
-   * @param selector 
-   * @returns 
-   */
-  getDom ( selector ) {
-    if ( selector ) return this.dom.querySelector( selector );
-    return this.dom;
+function navigate ( to, params = {} ) {
+  let arrParams: string[] = [];
+  if ( params ) {
+    Object.entries( params )
+      .map( ( [ k, v ] ) => {
+        arrParams.push(
+          `${ encodeURIComponent( decodeURIComponent( k ) ) }=${ encodeURIComponent( decodeURIComponent( v as string ) ) }`
+        );
+      } );
   }
-  /**
-   * Return an array of element that is matched to the selector parameter given.
-   * This method use querySelectorAll in finding all the matched elements.
-   * @param selector 
-   * @returns 
-   */
-  getDomAll ( selector ) { return this.dom.querySelectorAll( selector ); }
-  /**
-   * Will be called before the render occur.
-   */
-  willMount () { }
-  /**
-   * Mounting template to DOM container
-   */
-  render () { }
-  /**
-   * Will be called after the render.
-   */
-  onMount () { }
+  window.history.pushState( {}, '',
+    [ to, arrParams.filter( e => e ).join( "&" ) ]
+      .filter( e => e )
+      .join( "?" )
+  );
+  window.dispatchEvent( new PopStateEvent( "popstate" ) );
 }
+
 /**
  * Create reference object of the element
  * @param initial 
  * @returns 
  */
-export const createRef = ( initial = null ) => {
-  let ref: Reference = { current: initial };
+function createRef ( initial = null ) {
+  let ref = { current: initial };
   return ref;
 };
+
 /**
- * Handle scenario that you don't have to add tag as a parent node
- * and you have a numnber of childrens
- * @param param0 
+ * Start app 
+ * @param root 
  * @returns 
  */
-export const Fragment = ( { children } ) => children;
-/**
- * Call after the renderer is completed.
- * @param fn 
- */
-export const onSetup = ( fn: Function ) => {
-  if ( typeof fn === 'function' ) {
-    setupEventList.push( fn );
+function createApp ( root ) {
+  return {
+    render ( component: VNode ) {
+      render( component, root );
+    }
   }
 }
+
+/**
+ * Get the reference of the dom element.
+ * @param initialValue 
+ * @returns 
+ */
+function useRef<T> ( initialValue: T ): { current: T } {
+  const oldHook =
+    wipFiber!.alternate &&
+    wipFiber!.alternate.hooks &&
+    wipFiber!.alternate.hooks[ hookIndex ];
+  const hook: Hook = {
+    ref: oldHook ? oldHook.ref : { current: initialValue },
+  };
+  wipFiber!.hooks!.push( hook );
+  hookIndex++;
+  return hook.ref!;
+}
+/**
+ * Start requestIdleCallback loop.
+ */
+requestIdleCallback( workLoop );
+
+/**
+ * Expose functions.
+ */
+export {
+  createElement,
+  useState,
+  useEffect,
+  lazy,
+  Router,
+  navigate,
+  Fragment,
+  createRef,
+  createApp,
+  render,
+  IComponent,
+  useRef
+};

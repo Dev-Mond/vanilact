@@ -1,6 +1,5 @@
 import { createElement as _, Fragment } from './dist/vanilact.js';
 export default function Layout ( { children } ) {
-  console.log( children );
   return _( Fragment, {},
     _( 'div', { class: "fixed-top" },
       _( 'header', { class: "topbar" },
