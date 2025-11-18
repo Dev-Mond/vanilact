@@ -710,12 +710,7 @@ function matchRoute ( pathname, routePattern ) {
  * @returns 
  */
 function Router ( { routes, errorViews = [] }: { routes: { path: string; component: Function, middlewares: ( () => boolean )[] }[], errorViews: { path: string; component: Function }[] } ) {
-  const [ currentPath, setCurrentPath ] = useState( window.location.pathname );
-  useEffect( () => {
-    const handler = () => setCurrentPath( window.location.pathname as any );
-    window.addEventListener( "popstate", handler );
-    return () => window.removeEventListener( "popstate", handler );
-  }, [ currentPath ] );
+  const currentPath = window.location.pathname
   for ( const { path, component, middlewares } of routes ) {
     const params = matchRoute( currentPath, path );
     if ( params ) {
