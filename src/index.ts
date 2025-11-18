@@ -82,6 +82,33 @@ const isGone = ( prev: { [ key: string ]: any; }, next: { [ key: string ]: any; 
 const Fragment = Symbol( 'react.fragment' );
 
 /**
+ * Check if obj is VNode
+ * @param obj 
+ * @returns 
+ */
+const isVNode = ( obj: any ): obj is VNode => {
+  return typeof obj === 'object' && obj !== null && 'type' in obj && 'props' in obj;
+}
+
+/**
+ * Check if obj is a function
+ * @param obj 
+ * @returns 
+ */
+const isFunctionComponent = ( obj: any ): obj is Function => {
+  return typeof obj === 'function' && !( obj.prototype && obj.prototype.render );
+}
+
+/**
+ * Check if obj is a class component
+ * @param obj 
+ * @returns 
+ */
+const isClassComponent = ( obj: any ): obj is IComponent => {
+  return typeof obj === 'function' && obj.prototype && typeof obj.prototype.render === 'function';
+}
+
+/**
  * Class Component Interface
  */
 class IComponent {
@@ -750,8 +777,11 @@ function createRef ( initial = null ) {
 function createApp ( root ) {
   rootContainer = root;
   return {
-    render ( component: VNode ) {
-      rootComponent = component;
+    render ( component: VNode | Function | IComponent ) {
+      if ( isVNode( component ) )
+        rootComponent = component as VNode;
+      else
+        rootComponent = createElement( component as any, {} );
       window.addEventListener( "popstate", rerender );
       rerender();
     }

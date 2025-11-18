@@ -1,4 +1,4 @@
 import { createApp, createElement as _, } from './dist/vanilact.js';
 import App from './app.js';
 createApp( document.getElementById( 'root' ) )
-    .render( _( App ) ); 
+    .render( App ); 
