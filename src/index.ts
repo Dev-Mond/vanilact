@@ -49,6 +49,7 @@ let hookIndex: number = 0;
 let pendingEffects: ( () => void )[] = [];
 let rootComponent: VNode | null;
 let rootContainer: HTMLElement;
+let idleCallbackId: number | null = null;
 
 /**
  * Check if key is an event
@@ -432,6 +433,13 @@ function performUnitOfWork ( fiber: Fiber ): Fiber | null {
 }
 
 /**
+ * Start requestIdleCallback loop.
+ */
+function startWorkLoop () {
+  idleCallbackId = requestIdleCallback( workLoop );
+}
+
+/**
  * Update function component
  * @param fiber 
  */
@@ -514,7 +522,7 @@ function updateHostComponent ( fiber: Fiber ): void {
   if ( !fiber.dom ) {
     fiber.dom = createDom( fiber );
   }
-  if ( fiber.props.ref ) {
+  if ( fiber?.props?.ref ) {
     fiber.props.ref.current = fiber.dom;
   }
   reconcileChildren( fiber, fiber.props.children );
@@ -748,6 +756,10 @@ function navigate ( to, params = {} ) {
  * Rerender whole fiber
  */
 function rerender () {
+  if ( idleCallbackId !== null ) {
+    cancelIdleCallback( idleCallbackId );
+    idleCallbackId = null;
+  }
   rootContainer.innerHTML = "";
   nextUnitOfWork = null;
   currentRoot = null;
@@ -756,6 +768,7 @@ function rerender () {
   wipFiber = null;
   hookIndex = 0;
   pendingEffects = [];
+  startWorkLoop();
   render( rootComponent!, rootContainer );
 }
 
@@ -805,11 +818,6 @@ function useRef<T> ( initialValue: T ): { current: T } {
   hookIndex++;
   return hook.ref!;
 }
-
-/**
- * Start requestIdleCallback loop.
- */
-requestIdleCallback( workLoop );
 
 /**
  * Expose functions.
