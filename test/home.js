@@ -21,7 +21,7 @@ export default function Home () {
         ),
         _( 'div', { class: "col-lg-12" },
           _( 'br' ),
-          _( IFrame )
+          _( "<h2>This is html string</h2><br><h2>This is html string2</h2>" )
         ),
       )
     )

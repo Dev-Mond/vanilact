@@ -16,7 +16,7 @@ interface VNode {
 interface Fiber {
   type?: string | Function | symbol;
   props: { [ key: string ]: any; children: VNode[]; ref?: { current: any }; };
-  dom?: HTMLElement | Text | null | undefined;
+  dom?: HTMLElement | Text | DocumentFragment | null | undefined;
   parent?: Fiber | null | undefined;
   child?: Fiber | null | undefined;
   sibling?: Fiber | null | undefined;
@@ -110,6 +110,16 @@ const isClassComponent = ( obj: any ): obj is IComponent => {
 }
 
 /**
+ * Check if string is html
+ * @param str 
+ * @returns 
+ */
+const isHTML = ( str ) => {
+  const doc = new DOMParser().parseFromString( str, "text/html" );
+  return Array.from( doc.body.childNodes ).some( ( node ) => node.nodeType === 1 );
+};
+
+/**
  * Class Component Interface
  */
 class IComponent {
@@ -160,6 +170,16 @@ class IComponent {
  * @returns 
  */
 function createElement ( type: string | Function | symbol, props: { [ key: string ]: any; } | null, ...children: ( VNode | string | number )[] ): VNode {
+  if ( typeof type === 'string' && isHTML( type ) ) {
+    return {
+      type: 'RAW_HTML',
+      props: {
+        dangerouslySetInnerHTML: { __html: type },
+        children: []
+      }
+    };
+  }
+
   return {
     type,
     props: {
@@ -193,7 +213,11 @@ function createTextElement ( text: string | number ): VNode {
  * @param fiber 
  * @returns 
  */
-function createDom ( fiber: Fiber ): HTMLElement | Text {
+function createDom ( fiber: Fiber ): HTMLElement | Text | DocumentFragment {
+  if ( fiber.type === 'RAW_HTML' ) {
+    return document.createRange().createContextualFragment( fiber.props.dangerouslySetInnerHTML.__html );
+  }
+
   const dom =
     fiber.type === "TEXT_ELEMENT"
       ? document.createTextNode( "" )
@@ -210,7 +234,7 @@ function createDom ( fiber: Fiber ): HTMLElement | Text {
  * @param prevProps 
  * @param nextProps 
  */
-function updateDom ( dom: HTMLElement | Text, prevProps: { [ key: string ]: any; }, nextProps: { [ key: string ]: any; } ): void {
+function updateDom ( dom: HTMLElement | Text | DocumentFragment, prevProps: { [ key: string ]: any; }, nextProps: { [ key: string ]: any; } ): void {
   const normalizedNextProps = { ...nextProps };
   if ( normalizedNextProps.class ) {
     normalizedNextProps.className = normalizedNextProps.class;
@@ -355,7 +379,7 @@ function commitWork ( fiber: Fiber | null | undefined ): void {
  * @param fiber 
  * @param domParent 
  */
-function commitDeletion ( fiber: Fiber, domParent: HTMLElement | Text ): void {
+function commitDeletion ( fiber: Fiber, domParent: HTMLElement | Text | DocumentFragment ): void {
   if ( fiber.dom ) {
     domParent.removeChild( fiber.dom );
   } else {
