@@ -1,4 +1,5 @@
-import { createElement as _, useState, useEffect, IComponent } from './dist/vanilact.js';
+import { createElement as _, useState, navigate, IComponent } from './dist/vanilact.js';
+import Other from './other.js';
 export default class About extends IComponent {
   constructor ( props ) {
     super( props );
@@ -6,17 +7,30 @@ export default class About extends IComponent {
       count: 0,
       loading: false
     }
+    this.count = 0;
   }
   handleClick ( e ) {
-    this.setState( { count: this.state.count + 1 } );
+    navigate( '/' );
+  }
+  onMount () {
+    setTimeout( () => {
+      this.setState( { loading: true } );
+    }, 5000 );
+  }
+  onUpdate () {
+  }
+  onUnmount () {
+    console.log( "ON UNMOUNT..." )
   }
   render () {
     return _( 'div', { class: "container" },
       _( 'div', { class: "row" },
         _( 'div', { class: "col-lg-12" },
           _( 'h1', {}, 'Hello World About' ),
-          _( 'button', { class: "clicker", onClick: ( e ) => this.handleClick( e ) }, 'Clicker ' + this.state.count ),
-          _( 'div', {}, "LOADING: " + this.state.loading )
+          _( 'button', { class: "clicker", onClick: ( e ) => this.handleClick( e ) }, 'Clicker ' + this.state.count + " - " + this.count )
+        ),
+        _( 'div', { class: "col-lg-12" },
+          !this.state.loading ? _( Other ) : "REMOVED"
         )
       ),
     );

@@ -47,6 +47,8 @@ let deletions: Fiber[] = [];
 let wipFiber: Fiber | null = null;
 let hookIndex: number = 0;
 let pendingEffects: ( () => void )[] = [];
+let rootComponent: VNode | null;
+let rootContainer: HTMLElement;
 
 /**
  * Check if key is an event
@@ -99,7 +101,16 @@ class IComponent {
       props: currentRoot!.props,
       alternate: currentRoot
     };
-    console.log( wipRoot );
+    nextUnitOfWork = wipRoot;
+    deletions = [];
+  }
+
+  forceUpdate () {
+    wipRoot = {
+      dom: currentRoot!.dom,
+      props: currentRoot!.props,
+      alternate: currentRoot
+    };
     nextUnitOfWork = wipRoot;
     deletions = [];
   }
@@ -240,8 +251,6 @@ function updateDom ( dom: HTMLElement | Text, prevProps: { [ key: string ]: any;
 function commitRoot (): void {
   deletions.forEach( commitWork );
   commitWork( wipRoot!.child! );
-  currentRoot = wipRoot;
-  wipRoot = null;
 
   // Run pending effects after commit
   pendingEffects.forEach( effect => effect() );
@@ -249,6 +258,10 @@ function commitRoot (): void {
 
   // Call lifecycle methods for class component
   callLifecycleMethods( wipRoot );
+
+  // Reset
+  currentRoot = wipRoot;
+  wipRoot = null;
 }
 /**
  * Call class component lifecycle
@@ -300,7 +313,7 @@ function commitWork ( fiber: Fiber | null | undefined ): void {
     );
   } else if ( fiber.effectTag === "DELETION" ) {
     if ( fiber.instance ) {
-      fiber.instance.onUnmount();
+      fiber.instance.onUnmount?.();
     }
     commitDeletion( fiber, domParent );
   }
@@ -409,12 +422,15 @@ function updateFunctionComponent ( fiber: Fiber ): void {
  */
 function updateClassComponent ( fiber: Fiber ): void {
   const ComponentClass = fiber.type as any;
-  if ( !fiber.instance ) {
+  if ( fiber.alternate && fiber.alternate.instance ) {
+    fiber.instance = fiber.alternate.instance;
+    fiber.instance.props = fiber.props;
+    fiber.instance._fiber = fiber;
+  } else {
     fiber.instance = new ComponentClass( fiber.props );
     fiber.instance!._fiber = fiber;
-  } else {
-    fiber.instance.props = fiber.props;
   }
+
   const children = [ fiber.instance!.render() ].filter( e => e ) as VNode[];
   reconcileChildren( fiber, children );
 }
@@ -519,6 +535,12 @@ function reconcileChildren ( wipFiber: Fiber, elements: VNode[] ): void {
     if ( oldFiber && !sameType ) {
       oldFiber.effectTag = "DELETION";
       deletions.push( oldFiber );
+
+      if ( index === 0 ) {
+        wipFiber.child = null;
+      } else if ( prevSibling ) {
+        prevSibling.sibling = null;
+      }
     }
 
     if ( oldFiber ) {
@@ -634,7 +656,7 @@ function Router ( { routes, errorViews = [] }: { routes: { path: string; compone
     const handler = () => setCurrentPath( window.location.pathname as any );
     window.addEventListener( "popstate", handler );
     return () => window.removeEventListener( "popstate", handler );
-  }, [] );
+  }, [ currentPath ] );
   for ( const { path, component, middlewares } of routes ) {
     const params = matchRoute( currentPath, path );
     if ( params ) {
@@ -693,6 +715,21 @@ function navigate ( to, params = {} ) {
       .join( "?" )
   );
   window.dispatchEvent( new PopStateEvent( "popstate" ) );
+  rerender();
+}
+/**
+ * Rerender whole fiber
+ */
+function rerender () {
+  rootContainer.innerHTML = "";
+  nextUnitOfWork = null;
+  currentRoot = null;
+  wipRoot = null;
+  deletions = [];
+  wipFiber = null;
+  hookIndex = 0;
+  pendingEffects = [];
+  render( rootComponent!, rootContainer );
 }
 
 /**
@@ -711,9 +748,12 @@ function createRef ( initial = null ) {
  * @returns 
  */
 function createApp ( root ) {
+  rootContainer = root;
   return {
     render ( component: VNode ) {
-      render( component, root );
+      rootComponent = component;
+      window.addEventListener( "popstate", rerender );
+      rerender();
     }
   }
 }
@@ -735,6 +775,7 @@ function useRef<T> ( initialValue: T ): { current: T } {
   hookIndex++;
   return hook.ref!;
 }
+
 /**
  * Start requestIdleCallback loop.
  */
