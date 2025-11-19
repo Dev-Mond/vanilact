@@ -158,6 +158,7 @@ function renderComponent ( component, container ) {
 function rerender () {
   if ( renderCount++ > 100 ) throw new Error( "Too many rerenders!" );
   rootElement.innerHTML = '';
+  hookIndex = 0;
   renderComponent( appInstance, rootElement );
   if ( setupEventList && setupEventList.length > 0 ) {
     for ( const fn of setupEventList ) {
@@ -240,7 +241,7 @@ export function useEffect ( callback, deps ) {
   const hooks = currentComponent.hooks || ( currentComponent.hooks = [] );
   const prev = hooks[ hookIndex ];
 
-  const hasChanged = !prev || !deps || deps.some( ( d, i ) => d !== prev.deps[ i ] );
+  const hasChanged = !prev || !deps || ( deps || [] ).some( ( d, i ) => d !== prev?.( deps || [] )[ i ] );
 
   if ( hasChanged ) {
     hooks[ hookIndex ] = { callback, deps, cleanup: null };
