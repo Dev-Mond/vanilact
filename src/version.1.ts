@@ -330,7 +330,7 @@ export function lazy ( importFn ) {
       importFn()
         .then( module => {
           LoadedComponent = module.default;
-          forceUpdate( x => x + 1 ); // trigger re-render once loaded
+          forceUpdate( x => x + 1 );
         } )
         .catch( err => {
           error = err;
@@ -417,7 +417,7 @@ export class IComponent {
   /**
    * Entry point
    */
-  constructor () { this.dom = null; }
+  constructor() { this.dom = null; }
   /**
    * Set the parent node element.
    * @param dom 
@@ -478,3 +478,12 @@ export const onSetup = ( fn: Function ) => {
     setupEventList.push( fn );
   }
 };
+/**
+ * Extended render funtion to handle injected components
+ * @param component 
+ * @param container 
+ * @param instance 
+ */
+export const useRender = ( component, container, instance?: any ) => {
+  render( component, container, instance );
+}

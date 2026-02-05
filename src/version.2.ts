@@ -2,6 +2,7 @@
  * Refresent the virtual DOM
  */
 interface VNode {
+  _id?: string;
   type: string | Function | symbol;
   props: {
     [ key: string ]: any;
@@ -127,7 +128,7 @@ class IComponent {
   state: any;
   _fiber: Fiber | null = null;
 
-  constructor ( props: any ) {
+  constructor( props: any ) {
     this.props = props;
     this.state = {};
   }
@@ -172,6 +173,7 @@ class IComponent {
 function createElement ( type: string | Function | symbol, props: { [ key: string ]: any; } | null, ...children: ( VNode | string | number )[] ): VNode {
   if ( typeof type === 'string' && isHTML( type ) ) {
     return {
+      _id: Math.random().toString( 36 ),
       type: 'RAW_HTML',
       props: {
         dangerouslySetInnerHTML: { __html: type },
@@ -181,6 +183,7 @@ function createElement ( type: string | Function | symbol, props: { [ key: strin
   }
 
   return {
+    _id: Math.random().toString( 36 ),
     type,
     props: {
       ...props,
@@ -200,6 +203,7 @@ function createElement ( type: string | Function | symbol, props: { [ key: strin
  */
 function createTextElement ( text: string | number ): VNode {
   return {
+    _id: Math.random().toString( 36 ),
     type: "TEXT_ELEMENT",
     props: {
       nodeValue: text,
@@ -240,6 +244,7 @@ function updateDom ( dom: HTMLElement | Text | DocumentFragment, prevProps: { [ 
     normalizedNextProps.className = normalizedNextProps.class;
     delete normalizedNextProps.class;
   }
+
   // Remove old or changed event listeners
   Object.keys( prevProps )
     .filter( isEvent )
@@ -381,7 +386,12 @@ function commitWork ( fiber: Fiber | null | undefined ): void {
  */
 function commitDeletion ( fiber: Fiber, domParent: HTMLElement | Text | DocumentFragment ): void {
   if ( fiber.dom ) {
+    console.log( fiber.dom );
     domParent.removeChild( fiber.dom );
+    console.log( fiber.dom );
+    if ( fiber.dom instanceof Element )
+      fiber.dom?.remove();
+    console.log( fiber.dom );
   } else {
     commitDeletion( fiber.child!, domParent );
   }
@@ -594,7 +604,6 @@ function reconcileChildren ( wipFiber: Fiber, elements: VNode[] ): void {
     if ( oldFiber && !sameType ) {
       oldFiber.effectTag = "DELETION";
       deletions.push( oldFiber );
-
       if ( index === 0 ) {
         wipFiber.child = null;
       } else if ( prevSibling ) {

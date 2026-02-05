@@ -1,6 +1,6 @@
 {
   "name": "@devmore/vanilact",
-  "version": "1.0.8",
+  "version": "1.0.11",
   "description": "Pure vanila javascript.",
   "main": "dist/vanilact.js",
   "scripts": {
@@ -11,7 +11,7 @@
     "build:raw": "vite build --minify false",
     "build:min": "vite build --minify terser",
     "build:all": "npm run build:raw && npm run build:min",
-    "prepublishOnly": "npm run build:all && cp -r dist test"
+    "prepublishOnly": "npm run build:all && cp -r dist test/dist"
   },
   "repository": {
     "type": "git",
