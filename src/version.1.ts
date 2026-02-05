@@ -241,7 +241,11 @@ export function useEffect ( callback, deps ) {
   const hooks = currentComponent.hooks || ( currentComponent.hooks = [] );
   const prev = hooks[ hookIndex ];
 
-  const hasChanged = !prev || !deps || ( deps || [] ).some( ( d, i ) => d !== prev?.( deps || [] )[ i ] );
+  const hasChanged = !prev || !deps || ( deps || [] ).some( ( d, i ) => {
+    if ( typeof prev === 'function' )
+      return d !== prev?.( deps || [] )[ i ];
+    return d !== ( prev?.deps || [] )[ i ];
+  } );
 
   if ( hasChanged ) {
     hooks[ hookIndex ] = { callback, deps, cleanup: null };
