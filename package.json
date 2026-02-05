@@ -1,6 +1,6 @@
 {
   "name": "@devmore/vanilact",
-  "version": "1.0.11",
+  "version": "1.0.10",
   "description": "Pure vanila javascript.",
   "main": "dist/vanilact.js",
   "scripts": {
