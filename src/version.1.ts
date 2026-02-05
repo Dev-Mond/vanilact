@@ -484,6 +484,6 @@ export const onSetup = ( fn: Function ) => {
  * @param container 
  * @param instance 
  */
-export const useRender = ( component, container, instance?: any ) => {
-  render( component, container, instance );
+export const useRender = ( component, container ) => {
+  render( component, container );
 }
