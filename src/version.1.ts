@@ -160,6 +160,10 @@ function rerender () {
   rootElement.innerHTML = '';
   hookIndex = 0;
   renderComponent( appInstance, rootElement );
+  runSetup();
+  renderCount = 0;
+}
+function runSetup () {
   if ( setupEventList && setupEventList.length > 0 ) {
     for ( const fn of setupEventList ) {
       if ( typeof fn === 'function' ) {
@@ -172,7 +176,6 @@ function rerender () {
     }
     setupEventList = [];
   }
-  renderCount = 0;
 }
 /**
  * Change component view based or route
@@ -417,7 +420,7 @@ export class IComponent {
   /**
    * Entry point
    */
-  constructor() { this.dom = null; }
+  constructor () { this.dom = null; }
   /**
    * Set the parent node element.
    * @param dom 
@@ -486,4 +489,6 @@ export const onSetup = ( fn: Function ) => {
  */
 export const useRender = ( component, container ) => {
   render( component, container );
-}
+  runEffects( component );
+  runSetup();
+};
