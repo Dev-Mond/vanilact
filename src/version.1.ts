@@ -420,7 +420,7 @@ export class IComponent {
   /**
    * Entry point
    */
-  constructor () { this.dom = null; }
+  constructor() { this.dom = null; }
   /**
    * Set the parent node element.
    * @param dom 
@@ -489,6 +489,6 @@ export const onSetup = ( fn: Function ) => {
  */
 export const useRender = ( component, container ) => {
   render( component, container );
-  runEffects( component );
+  runEffects( appInstance );
   runSetup();
 };
