@@ -420,7 +420,7 @@ export class IComponent {
   /**
    * Entry point
    */
-  constructor() { this.dom = null; }
+  constructor () { this.dom = null; }
   /**
    * Set the parent node element.
    * @param dom 
